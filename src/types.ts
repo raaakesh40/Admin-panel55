@@ -75,8 +75,9 @@ export type Host = {
   name: string
   username: string
   mobileNumber?: string
+  upiId?: string
   assignedGame: string
-  role?: 'omb_host' | 'tournament_host' | string
+  role?: 'omb' | 'tournament' | 'omb_host' | 'tournament_host' | string
   status: 'active' | 'inactive' | 'suspended'
   totalMatchesHosted: number
   unpaidCommission: number

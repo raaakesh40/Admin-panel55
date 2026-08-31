@@ -15,9 +15,10 @@ export function HostsView() {
   const [newHostName, setNewHostName] = useState('')
   const [newHostUsername, setNewHostUsername] = useState('')
   const [newHostMobile, setNewHostMobile] = useState('')
+  const [newHostUpiId, setNewHostUpiId] = useState('')
   const [newHostPassword, setNewHostPassword] = useState('')
   const [newHostGame, setNewHostGame] = useState('BGMI (Battlegrounds Mobile)')
-  const [newHostRole, setNewHostRole] = useState<'tournament_host' | 'omb_host'>('tournament_host')
+  const [newHostRole, setNewHostRole] = useState<'tournament' | 'omb'>('tournament')
   const [newHostCommission, setNewHostCommission] = useState('10')
   const [addLoading, setAddLoading] = useState(false)
 
@@ -131,8 +132,9 @@ export function HostsView() {
       username: newHostUsername.trim(),
       mobileNumber: newHostMobile.trim(),
       password: newHostPassword,
+      upiId: newHostUpiId.trim(),
       assignedGame: newHostGame,
-      commissionRate: Number(newHostCommission),
+      commissionRate: Number(newHostCommission) || 10,
       role: newHostRole,
     }
 
@@ -147,6 +149,7 @@ export function HostsView() {
       setNewHostName('')
       setNewHostUsername('')
       setNewHostMobile('')
+      setNewHostUpiId('')
       setNewHostPassword('')
       await fetchHostsList()
     } catch (err) {
@@ -429,6 +432,17 @@ export function HostsView() {
               </label>
 
               <label>
+                UPI ID (Required for payouts)
+                <input
+                  required
+                  type="text"
+                  placeholder="e.g. host@okaxis or 9876543210@paytm"
+                  value={newHostUpiId}
+                  onChange={(e) => setNewHostUpiId(e.target.value)}
+                />
+              </label>
+
+              <label>
                 Initial Password
                 <input
                   required
@@ -457,10 +471,10 @@ export function HostsView() {
                 Host Role (System Role)
                 <select
                   value={newHostRole}
-                  onChange={(e) => setNewHostRole(e.target.value as 'tournament_host' | 'omb_host')}
+                  onChange={(e) => setNewHostRole(e.target.value as 'tournament' | 'omb')}
                 >
-                  <option value="tournament_host">Tournament Host (Tournaments & Custom Rooms)</option>
-                  <option value="omb_host">OMB Host (1v1 One Match Battles)</option>
+                  <option value="tournament">Tournament Host (Tournaments & Custom Rooms)</option>
+                  <option value="omb">OMB Host (1v1 One Match Battles)</option>
                 </select>
               </label>
 
