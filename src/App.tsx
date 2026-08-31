@@ -9,6 +9,7 @@ import { CompetitionsView } from './components/CompetitionsView'
 import { HostsView } from './components/HostsView'
 import { ContentView } from './components/ContentView'
 import { NotificationsView } from './components/NotificationsView'
+import { ErrorBoundary } from './components/ErrorBoundary'
 import './App.css'
 
 export function App() {
@@ -450,9 +451,9 @@ export function App() {
               <Bell size={16} />
             </button>
             <div className="profile">
-              <div className="avatar">{session.name.slice(0, 1).toUpperCase()}</div>
+              <div className="avatar">{(session.name || session.username || 'A').slice(0, 1).toUpperCase()}</div>
               <span>
-                {session.name}
+                {session.name || session.username || 'Administrator'}
                 <small>Administrator</small>
               </span>
               <button onClick={signOut} aria-label="Log out" title="Sign out of Admin Console">
@@ -463,20 +464,22 @@ export function App() {
         </header>
 
         <div className="content">
-          {page === 'Overview' && (
-            <OverviewView
-              dashboard={dashboard}
-              error={error}
-              retry={fetchDashboard}
-              isRefreshing={isRefreshing}
-              onSignOut={signOut}
-            />
-          )}
-          {page === 'Users' && <UsersView />}
-          {page === 'Competitions' && <CompetitionsView />}
-          {page === 'Hosts' && <HostsView />}
-          {page === 'Content' && <ContentView />}
-          {page === 'Notifications' && <NotificationsView />}
+          <ErrorBoundary fallbackTitle="Unable to load this section">
+            {page === 'Overview' && (
+              <OverviewView
+                dashboard={dashboard}
+                error={error}
+                retry={fetchDashboard}
+                isRefreshing={isRefreshing}
+                onSignOut={signOut}
+              />
+            )}
+            {page === 'Users' && <UsersView />}
+            {page === 'Competitions' && <CompetitionsView />}
+            {page === 'Hosts' && <HostsView />}
+            {page === 'Content' && <ContentView />}
+            {page === 'Notifications' && <NotificationsView />}
+          </ErrorBoundary>
         </div>
       </section>
     </div>

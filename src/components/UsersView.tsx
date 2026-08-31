@@ -190,8 +190,8 @@ export function UsersView() {
             </div>
 
             <div className="profile-actions">
-              <span className={`status-pill ${result.user.accountStatus.toLowerCase()}`}>
-                {result.user.accountStatus.toUpperCase()}
+              <span className={`status-pill ${(result.user.accountStatus || 'active').toLowerCase()}`}>
+                {(result.user.accountStatus || 'active').toUpperCase()}
               </span>
               <div className="action-buttons-row">
                 <button
@@ -201,7 +201,7 @@ export function UsersView() {
                 >
                   <Coins size={14} /> Adjust Balance
                 </button>
-                {result.user.accountStatus.toLowerCase() === 'active' ? (
+                {(result.user.accountStatus || 'active').toLowerCase() === 'active' ? (
                   <button
                     className="danger small-btn"
                     onClick={() => handleUpdateStatus('suspended')}
@@ -226,28 +226,28 @@ export function UsersView() {
             <div className="stat-card">
               <div className="stat-label">Play Coins</div>
               <div className="stat-value coin-play">
-                {result.wallets.find((w) => w.walletType === 'play_coins')?.balance ?? 0}
+                {(result.wallets || []).find((w) => w.walletType === 'play_coins')?.balance ?? 0}
               </div>
               <small>Deposit / Entry Wallet</small>
             </div>
             <div className="stat-card">
               <div className="stat-label">Winning Coins</div>
               <div className="stat-value coin-win">
-                {result.wallets.find((w) => w.walletType === 'winning_coins')?.balance ?? 0}
+                {(result.wallets || []).find((w) => w.walletType === 'winning_coins')?.balance ?? 0}
               </div>
               <small>Withdrawable Balance</small>
             </div>
             <div className="stat-card">
               <div className="stat-label">Lifetime Deposited</div>
               <div className="stat-value text-green">
-                <ArrowDownLeft size={16} /> ₹{result.totals.deposited.toLocaleString()}
+                <ArrowDownLeft size={16} /> ₹{((result.totals?.deposited ?? 0)).toLocaleString()}
               </div>
               <small>Total Cash-ins</small>
             </div>
             <div className="stat-card">
               <div className="stat-label">Lifetime Withdrawn</div>
               <div className="stat-value text-purple">
-                <ArrowUpRight size={16} /> ₹{result.totals.withdrawn.toLocaleString()}
+                <ArrowUpRight size={16} /> ₹{((result.totals?.withdrawn ?? 0)).toLocaleString()}
               </div>
               <small>Total Cash-outs</small>
             </div>
@@ -258,31 +258,31 @@ export function UsersView() {
             <div className="activity-grid">
               <div className="act-box">
                 <span>OMBs Joined</span>
-                <strong>{result.activity.ombsJoined}</strong>
+                <strong>{result.activity?.ombsJoined ?? 0}</strong>
               </div>
               <div className="act-box">
                 <span>OMBs Won</span>
-                <strong className="text-green">{result.activity.ombsWon}</strong>
+                <strong className="text-green">{result.activity?.ombsWon ?? 0}</strong>
               </div>
               <div className="act-box">
                 <span>Tournaments Joined</span>
-                <strong>{result.activity.tournamentsJoined}</strong>
+                <strong>{result.activity?.tournamentsJoined ?? 0}</strong>
               </div>
               <div className="act-box">
                 <span>Tournaments Won</span>
-                <strong className="text-green">{result.activity.tournamentsWon}</strong>
+                <strong className="text-green">{result.activity?.tournamentsWon ?? 0}</strong>
               </div>
             </div>
 
             <div className="current-matches-strip">
               <div className="current-match-col">
                 <span className="label">Active Running OMB:</span>
-                <strong>{result.current.omb ? result.current.omb.code : 'None Active'}</strong>
+                <strong>{result.current?.omb ? result.current.omb.code : 'None Active'}</strong>
               </div>
               <div className="current-match-col">
                 <span className="label">Active Running Tournament:</span>
                 <strong>
-                  {result.current.tournament ? result.current.tournament.code : 'None Active'}
+                  {result.current?.tournament ? result.current.tournament.code : 'None Active'}
                 </strong>
               </div>
             </div>

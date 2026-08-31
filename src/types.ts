@@ -83,6 +83,7 @@ export type Host = {
   unpaidCommission: number
   commissionRate: number
   totalEarned: number
+  assignedTournaments?: string[]
   lastActive?: string
   createdAt: string
 }

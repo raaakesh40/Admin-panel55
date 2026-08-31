@@ -4,6 +4,59 @@ import type { CompetitionItem } from '../types'
 import { api } from '../services/api'
 import { Search, Key, Users, Trophy, AlertCircle, CheckCircle2 } from 'lucide-react'
 
+function normalizeCompetition(data: unknown): CompetitionItem {
+  if (!data || typeof data !== 'object') {
+    return {
+      id: String(Math.random()),
+      code: 'MATCH',
+      type: 'tournament',
+      game: 'Custom Game',
+      title: 'Match',
+      mode: 'Solo',
+      entryFee: 0,
+      prizePool: 0,
+      status: 'upcoming',
+      maxSlots: 100,
+      joinedSlots: 0,
+      scheduleTime: 'Scheduled',
+      roomId: '',
+      roomPassword: '',
+      hostName: 'Platform Host',
+    }
+  }
+
+  const d = data as Record<string, unknown>
+  return {
+    id: String(d.id || d._id || Math.random()),
+    code: String(d.code || d.matchCode || d.match_code || 'MATCH'),
+    type: String(d.type || 'tournament').toLowerCase().includes('omb') ? 'omb' : 'tournament',
+    game: String(d.game || d.gameTitle || d.game_title || 'Custom Game'),
+    title: String(d.title || d.name || 'Match'),
+    mode: (d.mode as 'Solo' | 'Duo' | 'Squad' | '1v1') || 'Solo',
+    entryFee: Number(d.entryFee ?? d.entry_fee ?? d.fee ?? 0) || 0,
+    prizePool: Number(d.prizePool ?? d.prize_pool ?? d.prize ?? 0) || 0,
+    status: (d.status as 'upcoming' | 'open' | 'live' | 'completed' | 'cancelled') || 'upcoming',
+    maxSlots: Number(d.maxSlots ?? d.max_slots ?? d.slots ?? 100) || 100,
+    joinedSlots: Number(d.joinedSlots ?? d.joined_slots ?? d.participants ?? 0) || 0,
+    scheduleTime: String(d.scheduleTime || d.schedule_time || d.scheduledAt || 'Scheduled'),
+    roomId: String(d.roomId || d.room_id || ''),
+    roomPassword: String(d.roomPassword || d.room_password || ''),
+    hostName: String(d.hostName || d.host_name || d.host || 'Platform Host'),
+  }
+}
+
+function extractCompArray(data: unknown): CompetitionItem[] {
+  if (!data) return []
+  if (Array.isArray(data)) return data.map(normalizeCompetition)
+  if (typeof data === 'object') {
+    const r = data as Record<string, unknown>
+    if (Array.isArray(r.competitions)) return r.competitions.map(normalizeCompetition)
+    if (Array.isArray(r.data)) return r.data.map(normalizeCompetition)
+    if (Array.isArray(r.matches)) return r.matches.map(normalizeCompetition)
+  }
+  return []
+}
+
 export function CompetitionsView() {
   const [identifier, setIdentifier] = useState('')
   const [loading, setLoading] = useState(false)
@@ -23,16 +76,15 @@ export function CompetitionsView() {
   async function fetchCompetitionsList() {
     setListLoading(true)
     try {
-      const data = await api<CompetitionItem[] | { competitions: CompetitionItem[] }>('/operations/competitions')
-      const arr = Array.isArray(data) ? data : (data as { competitions?: CompetitionItem[] })?.competitions
-      if (arr && Array.isArray(arr)) {
-        setCompetitionsList(arr)
-      } else {
-        // Fallback endpoint
-        const fbData = await api<CompetitionItem[] | { competitions: CompetitionItem[] }>('/admin/competitions')
-        const fbArr = Array.isArray(fbData) ? fbData : (fbData as { competitions?: CompetitionItem[] })?.competitions
-        setCompetitionsList(Array.isArray(fbArr) ? fbArr : [])
+      let comps: CompetitionItem[] = []
+      try {
+        const data = await api<unknown>('/operations/competitions')
+        comps = extractCompArray(data)
+      } catch {
+        const fbData = await api<unknown>('/admin/competitions')
+        comps = extractCompArray(fbData)
       }
+      setCompetitionsList(comps)
     } catch {
       setCompetitionsList([])
     } finally {
@@ -44,18 +96,16 @@ export function CompetitionsView() {
     let ignore = false
     async function load() {
       try {
-        const data = await api<CompetitionItem[] | { competitions: CompetitionItem[] }>('/operations/competitions')
-        const arr = Array.isArray(data) ? data : (data as { competitions?: CompetitionItem[] })?.competitions
+        let comps: CompetitionItem[] = []
+        try {
+          const data = await api<unknown>('/operations/competitions')
+          comps = extractCompArray(data)
+        } catch {
+          const fbData = await api<unknown>('/admin/competitions')
+          comps = extractCompArray(fbData)
+        }
         if (!ignore) {
-          if (arr && Array.isArray(arr)) {
-            setCompetitionsList(arr)
-          } else {
-            const fbData = await api<CompetitionItem[] | { competitions: CompetitionItem[] }>('/admin/competitions')
-            const fbArr = Array.isArray(fbData) ? fbData : (fbData as { competitions?: CompetitionItem[] })?.competitions
-            if (!ignore) {
-              setCompetitionsList(Array.isArray(fbArr) ? fbArr : [])
-            }
-          }
+          setCompetitionsList(comps)
         }
       } catch {
         if (!ignore) {

@@ -4,6 +4,73 @@ import type { Host } from '../types'
 import { api } from '../services/api'
 import { UserPlus, IndianRupee, Key, Shield, ShieldCheck, ShieldAlert, CheckCircle2, AlertCircle, RefreshCw, Trash2 } from 'lucide-react'
 
+function normalizeHost(raw: unknown): Host {
+  if (!raw || typeof raw !== 'object') {
+    return {
+      id: String(Math.random()),
+      name: 'Host',
+      username: 'host',
+      assignedGame: 'BGMI',
+      role: 'tournament',
+      status: 'active',
+      totalMatchesHosted: 0,
+      unpaidCommission: 0,
+      totalEarned: 0,
+      commissionRate: 10,
+      assignedTournaments: [],
+      createdAt: new Date().toISOString(),
+    }
+  }
+
+  const r = raw as Record<string, unknown>
+  const id = String(r.id || r._id || r.userId || Math.random())
+  const username = String(r.username || r.name || 'host')
+  const name = String(r.name || r.username || 'Host')
+  const mobileNumber = r.mobileNumber || r.mobile_number || r.phone ? String(r.mobileNumber || r.mobile_number || r.phone) : ''
+  const upiId = r.upiId || r.upi_id ? String(r.upiId || r.upi_id) : ''
+  const assignedGame = String(r.assignedGame || r.assigned_game || r.game || 'BGMI (Battlegrounds Mobile)')
+  const rawRole = String(r.role || 'tournament').toLowerCase()
+  const role = rawRole.includes('omb') ? 'omb' : 'tournament'
+  const rawStatus = String(r.status || 'active').toLowerCase()
+  const status = rawStatus === 'suspended' || rawStatus === 'inactive' ? 'suspended' : 'active'
+
+  const totalMatchesHosted = Number(r.totalMatchesHosted ?? r.total_matches_hosted ?? r.matchesCount ?? 0) || 0
+  const unpaidCommission = Number(r.unpaidCommission ?? r.unpaid_commission ?? r.unpaidBalance ?? r.balance ?? 0) || 0
+  const totalEarned = Number(r.totalEarned ?? r.total_earned ?? r.earned ?? 0) || 0
+  const commissionRate = Number(r.commissionRate ?? r.commission_rate ?? r.commission ?? 10) || 10
+  const assignedTournaments = Array.isArray(r.assignedTournaments) ? (r.assignedTournaments as string[]) : []
+  const createdAt = String(r.createdAt || r.created_at || new Date().toISOString())
+
+  return {
+    id,
+    name,
+    username,
+    mobileNumber,
+    upiId,
+    assignedGame,
+    role,
+    status,
+    totalMatchesHosted,
+    unpaidCommission,
+    totalEarned,
+    commissionRate,
+    assignedTournaments,
+    createdAt,
+  }
+}
+
+function extractHostArray(data: unknown): Host[] {
+  if (!data) return []
+  if (Array.isArray(data)) return data.map(normalizeHost)
+  if (typeof data === 'object') {
+    const rec = data as Record<string, unknown>
+    if (Array.isArray(rec.hosts)) return rec.hosts.map(normalizeHost)
+    if (Array.isArray(rec.data)) return rec.data.map(normalizeHost)
+    if (Array.isArray(rec.users)) return rec.users.map(normalizeHost)
+  }
+  return []
+}
+
 export function HostsView() {
   const [hosts, setHosts] = useState<Host[]>([])
   const [loading, setLoading] = useState(false)
@@ -43,25 +110,20 @@ export function HostsView() {
     setLoading(true)
     setErrorMessage('')
     try {
-      let hostArray: Host[] | undefined
+      let hostList: Host[] = []
       try {
-        const data = await api<{ hosts: Host[] } | Host[]>('/admin/hosts')
-        hostArray = Array.isArray(data) ? data : (data as { hosts?: Host[] })?.hosts
+        const data = await api<unknown>('/admin/hosts')
+        hostList = extractHostArray(data)
       } catch (adminErr) {
-        // If /admin/hosts returns 404, attempt fallback to /hosts or /admin/users
         try {
-          const fallbackData = await api<{ hosts: Host[] } | Host[]>('/hosts')
-          hostArray = Array.isArray(fallbackData) ? fallbackData : (fallbackData as { hosts?: Host[] })?.hosts
+          const fallbackData = await api<unknown>('/hosts')
+          hostList = extractHostArray(fallbackData)
         } catch {
           throw adminErr
         }
       }
 
-      if (hostArray && Array.isArray(hostArray)) {
-        setHosts(hostArray)
-      } else {
-        setHosts([])
-      }
+      setHosts(hostList)
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Could not fetch hosts from server database.'
       if (msg.includes('404')) {
@@ -81,25 +143,21 @@ export function HostsView() {
     let ignore = false
     async function load() {
       try {
-        let hostArray: Host[] | undefined
+        let hostList: Host[] = []
         try {
-          const data = await api<{ hosts: Host[] } | Host[]>('/admin/hosts')
-          hostArray = Array.isArray(data) ? data : (data as { hosts?: Host[] })?.hosts
+          const data = await api<unknown>('/admin/hosts')
+          hostList = extractHostArray(data)
         } catch (adminErr) {
           try {
-            const fallbackData = await api<{ hosts: Host[] } | Host[]>('/hosts')
-            hostArray = Array.isArray(fallbackData) ? fallbackData : (fallbackData as { hosts?: Host[] })?.hosts
+            const fallbackData = await api<unknown>('/hosts')
+            hostList = extractHostArray(fallbackData)
           } catch {
             throw adminErr
           }
         }
 
         if (!ignore) {
-          if (hostArray && Array.isArray(hostArray)) {
-            setHosts(hostArray)
-          } else {
-            setHosts([])
-          }
+          setHosts(hostList)
         }
       } catch (err) {
         if (!ignore) {
@@ -303,41 +361,41 @@ export function HostsView() {
               <div className="host-card-top">
                 <div className="host-identity">
                   <div className="avatar host-avatar">
-                    {host.name.slice(0, 1).toUpperCase()}
+                    {(host.name || host.username || 'H').slice(0, 1).toUpperCase()}
                   </div>
                   <div>
-                    <h4>{host.name}</h4>
-                    <small>@{host.username} • {host.mobileNumber || 'No mobile'}</small>
+                    <h4>{host.name || host.username || 'Host'}</h4>
+                    <small>@{host.username || 'host'} • {host.mobileNumber || host.upiId || 'No contact'}</small>
                   </div>
                 </div>
-                <span className={`status-pill ${host.status}`}>
-                  {host.status.toUpperCase()}
+                <span className={`status-pill ${host.status || 'active'}`}>
+                  {(host.status || 'active').toUpperCase()}
                 </span>
               </div>
 
               <div className="host-game-tag">
                 <span>Assigned Game:</span>
-                <b>{host.assignedGame}</b>
+                <b>{host.assignedGame || 'BGMI (Battlegrounds Mobile)'}</b>
               </div>
 
               <div className="host-stats-row">
                 <div className="hstat">
                   <span>Matches Hosted</span>
-                  <strong>{host.totalMatchesHosted}</strong>
+                  <strong>{host.totalMatchesHosted ?? 0}</strong>
                 </div>
                 <div className="hstat">
                   <span>Commission Rate</span>
-                  <strong>{host.commissionRate}%</strong>
+                  <strong>{host.commissionRate ?? 10}%</strong>
                 </div>
                 <div className="hstat">
                   <span>Unpaid Balance</span>
-                  <strong className={host.unpaidCommission > 0 ? 'text-coral' : 'text-green'}>
-                    ₹{host.unpaidCommission.toLocaleString()}
+                  <strong className={(host.unpaidCommission ?? 0) > 0 ? 'text-coral' : 'text-green'}>
+                    ₹{(host.unpaidCommission ?? 0).toLocaleString()}
                   </strong>
                 </div>
                 <div className="hstat">
                   <span>Total Earned</span>
-                  <strong>₹{host.totalEarned.toLocaleString()}</strong>
+                  <strong>₹{(host.totalEarned ?? 0).toLocaleString()}</strong>
                 </div>
               </div>
 
@@ -346,7 +404,7 @@ export function HostsView() {
                   className="secondary small-btn"
                   onClick={() => {
                     setActivePayHost(host)
-                    setPayAmount(host.unpaidCommission > 0 ? String(host.unpaidCommission) : '')
+                    setPayAmount((host.unpaidCommission ?? 0) > 0 ? String(host.unpaidCommission) : '')
                   }}
                 >
                   <IndianRupee size={14} /> Pay Host
@@ -361,10 +419,10 @@ export function HostsView() {
                   <Key size={14} /> Reset Pass
                 </button>
                 <button
-                  className={`small-btn ${host.status === 'active' ? 'secondary' : 'success'}`}
+                  className={`small-btn ${(host.status || 'active') === 'active' ? 'secondary' : 'success'}`}
                   onClick={() => toggleHostStatus(host)}
                 >
-                  {host.status === 'active' ? (
+                  {(host.status || 'active') === 'active' ? (
                     <>
                       <ShieldAlert size={14} /> Suspend
                     </>
@@ -519,7 +577,7 @@ export function HostsView() {
               </button>
             </div>
             <p className="modal-desc">
-              Record commission settlement for <b>{activePayHost.name}</b> (Unpaid balance: ₹{activePayHost.unpaidCommission.toLocaleString()}).
+              Record commission settlement for <b>{activePayHost.name || activePayHost.username || 'Host'}</b> (Unpaid balance: ₹{(activePayHost.unpaidCommission ?? 0).toLocaleString()}).
             </p>
             <form onSubmit={handlePayHost} className="modal-form">
               <label>
@@ -636,15 +694,15 @@ export function HostsView() {
               </button>
             </div>
             <div className="modal-desc" style={{ textAlign: 'left', lineHeight: 1.5 }}>
-              <p>Are you sure you want to permanently remove host <b>{hostToDelete.name}</b> (<b>@{hostToDelete.username}</b>)?</p>
+              <p>Are you sure you want to permanently remove host <b>{hostToDelete.name || hostToDelete.username || 'Host'}</b> (<b>@{hostToDelete.username || 'host'}</b>)?</p>
               <div style={{ marginTop: '12px', padding: '12px', background: 'var(--surface-muted)', borderRadius: '8px', fontSize: '13px' }}>
-                <div>🎮 <b>Assigned Game:</b> {hostToDelete.assignedGame}</div>
-                <div>📊 <b>Matches Hosted:</b> {hostToDelete.totalMatchesHosted}</div>
-                <div>💰 <b>Unpaid Commission:</b> ₹{hostToDelete.unpaidCommission.toLocaleString()}</div>
+                <div>🎮 <b>Assigned Game:</b> {hostToDelete.assignedGame || 'BGMI'}</div>
+                <div>📊 <b>Matches Hosted:</b> {hostToDelete.totalMatchesHosted ?? 0}</div>
+                <div>💰 <b>Unpaid Commission:</b> ₹{(hostToDelete.unpaidCommission ?? 0).toLocaleString()}</div>
               </div>
-              {hostToDelete.unpaidCommission > 0 && (
+              {(hostToDelete.unpaidCommission ?? 0) > 0 && (
                 <div style={{ marginTop: '10px', color: 'var(--coral-color)', fontSize: '12px', fontWeight: 600 }}>
-                  ⚠️ Warning: This host still has ₹{hostToDelete.unpaidCommission.toLocaleString()} unpaid commission balance.
+                  ⚠️ Warning: This host still has ₹{(hostToDelete.unpaidCommission ?? 0).toLocaleString()} unpaid commission balance.
                 </div>
               )}
             </div>
