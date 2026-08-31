@@ -2,35 +2,20 @@ import { useState, useEffect } from 'react'
 import type { FormEvent } from 'react'
 import type { CompetitionItem } from '../types'
 import { api } from '../services/api'
-import { Search, Key, Trophy, AlertCircle, CheckCircle2 } from 'lucide-react'
+import { Search, Key, Trophy, AlertCircle, CheckCircle2, RefreshCw } from 'lucide-react'
 
-function normalizeCompetition(data: unknown): CompetitionItem {
-  if (!data || typeof data !== 'object') {
-    return {
-      id: String(Math.random()),
-      code: 'MATCH',
-      type: 'tournament',
-      game: 'Custom Game',
-      title: 'Match',
-      mode: 'Solo',
-      entryFee: 0,
-      prizePool: 0,
-      status: 'upcoming',
-      maxSlots: 100,
-      joinedSlots: 0,
-      scheduleTime: 'Scheduled',
-      roomId: '',
-      roomPassword: '',
-      hostName: 'Host',
-    }
-  }
+function normalizeCompetition(data: unknown): CompetitionItem | null {
+  if (!data || typeof data !== 'object') return null
 
   const d = data as Record<string, unknown>
+  const id = String(d.id || d._id || d.competitionId || d.matchId || '')
+  if (!id) return null
+
   return {
-    id: String(d.id || d._id || Math.random()),
-    code: String(d.code || d.matchCode || d.match_code || 'MATCH'),
+    id,
+    code: String(d.code || d.matchCode || d.match_code || id.slice(-6).toUpperCase()),
     type: String(d.type || 'tournament').toLowerCase().includes('omb') ? 'omb' : 'tournament',
-    game: String(d.game || d.gameTitle || d.game_title || 'Custom Game'),
+    game: String(d.game || d.gameTitle || d.game_title || 'Game'),
     title: String(d.title || d.name || 'Match'),
     mode: (d.mode as 'Solo' | 'Duo' | 'Squad' | '1v1') || 'Solo',
     entryFee: Number(d.entryFee ?? d.entry_fee ?? d.fee ?? 0) || 0,
@@ -38,7 +23,7 @@ function normalizeCompetition(data: unknown): CompetitionItem {
     status: (d.status as 'upcoming' | 'open' | 'live' | 'completed' | 'cancelled') || 'upcoming',
     maxSlots: Number(d.maxSlots ?? d.max_slots ?? d.slots ?? 100) || 100,
     joinedSlots: Number(d.joinedSlots ?? d.joined_slots ?? d.participants ?? 0) || 0,
-    scheduleTime: String(d.scheduleTime || d.schedule_time || d.scheduledAt || 'Scheduled'),
+    scheduleTime: String(d.scheduleTime || d.schedule_time || d.scheduledAt || d.time || 'Scheduled'),
     roomId: String(d.roomId || d.room_id || ''),
     roomPassword: String(d.roomPassword || d.room_password || ''),
     hostName: String(d.hostName || d.host_name || d.host || 'Host'),
@@ -47,12 +32,20 @@ function normalizeCompetition(data: unknown): CompetitionItem {
 
 function extractCompArray(data: unknown): CompetitionItem[] {
   if (!data) return []
-  if (Array.isArray(data)) return data.map(normalizeCompetition)
+  if (Array.isArray(data)) {
+    return data.map(normalizeCompetition).filter((c): c is CompetitionItem => c !== null)
+  }
   if (typeof data === 'object') {
-    const r一身 = data as Record<string, unknown>
-    if (Array.isArray(r一身.competitions)) return r一身.competitions.map(normalizeCompetition)
-    if (Array.isArray(r一身.data)) return r一身.data.map(normalizeCompetition)
-    if (Array.isArray(r一身.matches)) return r一身.matches.map(normalizeCompetition)
+    const r = data as Record<string, unknown>
+    if (Array.isArray(r.competitions)) {
+      return r.competitions.map(normalizeCompetition).filter((c): c is CompetitionItem => c !== null)
+    }
+    if (Array.isArray(r.data)) {
+      return r.data.map(normalizeCompetition).filter((c): c is CompetitionItem => c !== null)
+    }
+    if (Array.isArray(r.matches)) {
+      return r.matches.map(normalizeCompetition).filter((c): c is CompetitionItem => c !== null)
+    }
   }
   return []
 }
@@ -72,14 +65,15 @@ export function CompetitionsView() {
 
   async function fetchCompetitionsList() {
     setListLoading(true)
+    setErrorMessage('')
     try {
       const allComps: CompetitionItem[] = []
       try {
         const ombData = await api<unknown>('/competitions/omb/available')
-        const ombList述 = extractCompArray(ombData).map((c) => ({ ...c, type: 'omb' as const }))
-        allComps.push(...ombList述)
+        const ombList = extractCompArray(ombData).map((c) => ({ ...c, type: 'omb' as const }))
+        allComps.push(...ombList)
       } catch {
-        // fallback
+        // ignore
       }
 
       try {
@@ -87,7 +81,7 @@ export function CompetitionsView() {
         const tourList = extractCompArray(tourData).map((c) => ({ ...c, type: 'tournament' as const }))
         allComps.push(...tourList)
       } catch {
-        // fallback
+        // ignore
       }
 
       if (allComps.length === 0) {
@@ -99,8 +93,17 @@ export function CompetitionsView() {
         }
       }
 
-      setCompetitionsList(allComps)
-    } catch {
+      // Deduplicate by ID
+      const seen = new Set<string>()
+      const uniqueComps = allComps.filter((c) => {
+        if (seen.has(c.id)) return false
+        seen.add(c.id)
+        return true
+      })
+
+      setCompetitionsList(uniqueComps)
+    } catch (err) {
+      setErrorMessage(err instanceof Error ? err.message : 'Failed to query database for matches.')
       setCompetitionsList([])
     } finally {
       setListLoading(false)
@@ -110,6 +113,7 @@ export function CompetitionsView() {
   useEffect(() => {
     let ignore = false
     async function load() {
+      setListLoading(true)
       try {
         const allComps: CompetitionItem[] = []
         try {
@@ -124,12 +128,30 @@ export function CompetitionsView() {
         } catch {
           // ignore
         }
+        if (allComps.length === 0) {
+          try {
+            const opsData = await api<unknown>('/operations/competitions')
+            allComps.push(...extractCompArray(opsData))
+          } catch {
+            // ignore
+          }
+        }
         if (!ignore) {
-          setCompetitionsList(allComps)
+          const seen = new Set<string>()
+          const uniqueComps = allComps.filter((c) => {
+            if (seen.has(c.id)) return false
+            seen.add(c.id)
+            return true
+          })
+          setCompetitionsList(uniqueComps)
         }
       } catch {
         if (!ignore) {
           setCompetitionsList([])
+        }
+      } finally {
+        if (!ignore) {
+          setListLoading(false)
         }
       }
     }
@@ -159,27 +181,17 @@ export function CompetitionsView() {
       )
 
       if (data && typeof data === 'object') {
-        const item: CompetitionItem = {
-          id: String(data.id || clean),
-          code: String(data.code || data.matchCode || clean),
-          type: (data.type as 'omb' | 'tournament') || 'tournament',
-          game: String(data.game || data.gameTitle || 'Custom Game'),
-          title: String(data.title || data.name || `Match ${clean}`),
-          mode: (data.mode as 'Solo' | 'Duo' | 'Squad' | '1v1') || 'Solo',
-          entryFee: Number(data.entryFee || data.fee || 0),
-          prizePool: Number(data.prizePool || data.prize || 0),
-          status: (data.status as 'upcoming' | 'open' | 'live' | 'completed' | 'cancelled') || 'upcoming',
-          maxSlots: Number(data.maxSlots || data.slots || 100),
-          joinedSlots: Number(data.joinedSlots || data.participants || 0),
-          scheduleTime: String(data.scheduleTime || data.scheduledAt || 'Scheduled'),
-          roomId: String(data.roomId || ''),
-          roomPassword: String(data.roomPassword || ''),
-          hostName: String(data.hostName || 'Host'),
+        const normalized = normalizeCompetition(data)
+        if (normalized) {
+          setSearchResult(normalized)
+        } else {
+          setErrorMessage(`No match found in database for "${clean}".`)
         }
-        setSearchResult(item)
+      } else {
+        setErrorMessage(`No match found in database for "${clean}".`)
       }
     } catch (e) {
-      setErrorMessage(e instanceof Error ? e.message : 'Match not found.')
+      setErrorMessage(e instanceof Error ? e.message : 'Match not found in database.')
     } finally {
       setLoading(false)
     }
@@ -202,11 +214,11 @@ export function CompetitionsView() {
         }),
       })
 
-      setActionSuccess(`Room updated for match ${activeRoomMatch.code}`)
+      setActionSuccess(`Room credentials saved to database for match ${activeRoomMatch.code}.`)
       setActiveRoomMatch(null)
       await fetchCompetitionsList()
     } catch (err) {
-      setErrorMessage(err instanceof Error ? err.message : 'Failed to update room.')
+      setErrorMessage(err instanceof Error ? err.message : 'Database error: Failed to update room.')
     } finally {
       setRoomLoading(false)
     }
@@ -229,8 +241,16 @@ export function CompetitionsView() {
       <div className="view-header">
         <div>
           <h2>Matches</h2>
-          <p>Search competitions and publish room details</p>
+          <p>Live matches & tournaments from database</p>
         </div>
+        <button
+          className="secondary small-btn"
+          onClick={fetchCompetitionsList}
+          disabled={listLoading}
+          title="Refresh matches from database"
+        >
+          <RefreshCw size={14} className={listLoading ? 'spinning' : ''} />
+        </button>
       </div>
 
       <form className="search-form-card" onSubmit={handleSearch}>
@@ -239,13 +259,13 @@ export function CompetitionsView() {
           <input
             required
             type="text"
-            placeholder="Search Match ID or Code..."
+            placeholder="Search Match ID or Code in database..."
             value={identifier}
             onChange={(e) => setIdentifier(e.target.value)}
           />
         </div>
         <button className="primary" type="submit" disabled={loading}>
-          {loading ? 'Searching...' : 'Search'}
+          {loading ? 'Searching DB...' : 'Search'}
         </button>
       </form>
 
@@ -325,7 +345,7 @@ export function CompetitionsView() {
       )}
 
       <div className="section-divider">
-        <h3>Live & Upcoming Matches</h3>
+        <h3>Live & Upcoming Matches ({filteredMatches.length})</h3>
         <div className="filters-row">
           <select
             value={filterType}
@@ -351,14 +371,19 @@ export function CompetitionsView() {
         </div>
       </div>
 
-      {filteredMatches.length === 0 && !listLoading ? (
+      {listLoading ? (
+        <div className="loading-card">
+          <RefreshCw size={24} className="spinning" color="#aa3bff" />
+          <p>Querying database matches...</p>
+        </div>
+      ) : filteredMatches.length === 0 ? (
         <div className="state-card">
           <div className="state-icon">
             <Trophy size={32} color="#ffa800" />
           </div>
-          <h3>No Matches Found</h3>
+          <h3>No Matches in Database</h3>
           <p className="state-desc">
-            No competitions active right now. Schedule new matches from Content tab.
+            No active competitions found in the database. When players or hosts schedule matches, they will appear here in real time.
           </p>
         </div>
       ) : (
@@ -456,7 +481,7 @@ export function CompetitionsView() {
                   Cancel
                 </button>
                 <button type="submit" className="primary" disabled={roomLoading}>
-                  {roomLoading ? 'Saving...' : 'Save Room'}
+                  {roomLoading ? 'Saving to Database...' : 'Save Room'}
                 </button>
               </div>
             </form>

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import type { FormEvent } from 'react'
 import type { DailyScheduleItem } from '../types'
 import { api } from '../services/api'
@@ -13,78 +13,76 @@ import {
   X,
   ListFilter,
   PlusCircle,
+  RefreshCw,
+  Gamepad2,
 } from 'lucide-react'
 
-const DEFAULT_SCHEDULES: DailyScheduleItem[] = [
-  {
-    id: 'sch_bgmi_daily_squad',
-    game: 'BGMI',
-    title: 'BGMI Mega Squad Battle',
-    type: 'tournament',
-    mode: 'Squad',
-    entryFee: 50,
-    maxParticipants: 100,
-    prizePool: 3500,
-    dailySlots: ['14:00', '18:00', '21:30'],
-    recurrence: 'daily',
-    status: 'published',
-    roomRevealMinutesBeforeStart: 15,
-    createdAt: new Date().toISOString(),
-  },
-  {
-    id: 'sch_bgmi_solo_omb',
-    game: 'BGMI',
-    title: 'BGMI 1v1 Cash Duel',
-    type: 'omb',
-    mode: '1v1',
-    entryFee: 30,
-    maxParticipants: 2,
-    prizePool: 50,
-    dailySlots: ['12:00', '15:00', '19:00', '22:00'],
-    recurrence: 'daily',
-    status: 'published',
-    roomRevealMinutesBeforeStart: 10,
-    createdAt: new Date().toISOString(),
-  },
-  {
-    id: 'sch_ff_squad_daily',
-    game: 'Free Fire MAX',
-    title: 'Free Fire Daily Squad Cup',
-    type: 'tournament',
-    mode: 'Squad',
-    entryFee: 40,
-    maxParticipants: 48,
-    prizePool: 1500,
-    dailySlots: ['16:00', '20:00'],
-    recurrence: 'daily',
-    status: 'published',
-    roomRevealMinutesBeforeStart: 15,
-    createdAt: new Date().toISOString(),
-  },
-]
+function normalizeScheduleItem(raw: unknown): DailyScheduleItem {
+  const d = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>
+  const rawSlots = d.dailySlots || d.slots || d.scheduleSlots || d.timings
+  let dailySlots: string[] = []
+  if (Array.isArray(rawSlots)) {
+    dailySlots = rawSlots.map((s) => String(s))
+  } else if (typeof rawSlots === 'string') {
+    dailySlots = rawSlots.split(',').map((s) => s.trim()).filter(Boolean)
+  } else if (d.scheduleTime || d.schedule_time || d.time) {
+    dailySlots = [String(d.scheduleTime || d.schedule_time || d.time)]
+  }
+
+  const rawRecurrence = String(d.recurrence || 'daily').toLowerCase()
+  const recurrence: 'daily' | 'weekdays' | 'weekends' | 'custom' =
+    rawRecurrence === 'weekdays' || rawRecurrence === 'weekends' || rawRecurrence === 'custom'
+      ? rawRecurrence
+      : 'daily'
+
+  const rawStatus = String(d.status || 'published').toLowerCase()
+  const status: 'published' | 'draft' | 'closed' =
+    rawStatus === 'draft' || rawStatus === 'closed' ? rawStatus : 'published'
+
+  const rawType = String(d.type || 'tournament').toLowerCase()
+  const type: 'omb' | 'tournament' = rawType.includes('omb') ? 'omb' : 'tournament'
+
+  const rawMode = String(d.mode || (type === 'omb' ? '1v1' : 'Squad'))
+  const mode: 'Solo' | 'Duo' | 'Squad' | '1v1' =
+    rawMode === 'Solo' || rawMode === 'Duo' || rawMode === 'Squad' || rawMode === '1v1'
+      ? rawMode
+      : 'Squad'
+
+  return {
+    id: String(d.id || d._id || d.scheduleId || ''),
+    game: String(d.game || d.gameTitle || 'BGMI'),
+    title: String(d.title || d.name || 'Schedule'),
+    type,
+    mode,
+    entryFee: Number(d.entryFee ?? d.entry_fee ?? d.fee ?? 0) || 0,
+    maxParticipants: Number(d.maxParticipants ?? d.maxSlots ?? d.slots ?? (type === 'omb' ? 2 : 100)) || 100,
+    prizePool: Number(d.prizePool ?? d.prize_pool ?? d.prize ?? 0) || 0,
+    dailySlots: dailySlots.length > 0 ? dailySlots : ['18:00'],
+    recurrence,
+    status,
+    roomRevealMinutesBeforeStart: Number(d.roomRevealMinutesBeforeStart ?? d.revealMinutes ?? 15) || 15,
+    createdAt: String(d.createdAt || d.created_at || new Date().toISOString()),
+  }
+}
+
+function extractSchedulesArray(data: unknown): DailyScheduleItem[] {
+  if (!data) return []
+  if (Array.isArray(data)) return data.map(normalizeScheduleItem).filter((s) => Boolean(s.id))
+  if (typeof data === 'object') {
+    const rec = data as Record<string, unknown>
+    if (Array.isArray(rec.schedules)) return rec.schedules.map(normalizeScheduleItem).filter((s) => Boolean(s.id))
+    if (Array.isArray(rec.data)) return rec.data.map(normalizeScheduleItem).filter((s) => Boolean(s.id))
+    if (Array.isArray(rec.competitions)) return rec.competitions.map(normalizeScheduleItem).filter((s) => Boolean(s.id))
+  }
+  return []
+}
 
 export function ContentView() {
   const [activeTab, setActiveTab] = useState<'roster' | 'create'>('roster')
 
-  // Preserved Daily Schedules
-  const [schedules, setSchedules] = useState<DailyScheduleItem[]>(() => {
-    try {
-      const stored = localStorage.getItem('pw_daily_schedules')
-      if (stored) return JSON.parse(stored) as DailyScheduleItem[]
-    } catch {
-      // ignore
-    }
-    return DEFAULT_SCHEDULES
-  })
-
-  function saveSchedules(list: DailyScheduleItem[]) {
-    setSchedules(list)
-    try {
-      localStorage.setItem('pw_daily_schedules', JSON.stringify(list))
-    } catch {
-      // ignore
-    }
-  }
+  // Real Database Schedules State (no fake initial items)
+  const [schedules, setSchedules] = useState<DailyScheduleItem[]>([])
+  const [loadingList, setLoadingList] = useState(false)
 
   // Form State
   const [competitionType, setCompetitionType] = useState<'tournament' | 'omb'>('tournament')
@@ -109,11 +107,75 @@ export function ContentView() {
   const [actionSuccess, setActionSuccess] = useState('')
   const [errorMessage, setErrorMessage] = useState('')
 
+  async function fetchSchedulesFromDB() {
+    setLoadingList(true)
+    setErrorMessage('')
+    try {
+      let list: DailyScheduleItem[] = []
+      try {
+        const data = await api<unknown>('/admin/competition/schedules')
+        list = extractSchedulesArray(data)
+      } catch {
+        try {
+          const altData = await api<unknown>('/competitions/schedules')
+          list = extractSchedulesArray(altData)
+        } catch {
+          const opsData = await api<unknown>('/operations/schedules')
+          list = extractSchedulesArray(opsData)
+        }
+      }
+      setSchedules(list)
+    } catch (err) {
+      setErrorMessage(err instanceof Error ? err.message : 'Unable to connect to database for schedules.')
+      setSchedules([])
+    } finally {
+      setLoadingList(false)
+    }
+  }
+
+  useEffect(() => {
+    let ignore = false
+    async function load() {
+      setLoadingList(true)
+      try {
+        let list: DailyScheduleItem[] = []
+        try {
+          const data = await api<unknown>('/admin/competition/schedules')
+          list = extractSchedulesArray(data)
+        } catch {
+          try {
+            const altData = await api<unknown>('/competitions/schedules')
+            list = extractSchedulesArray(altData)
+          } catch {
+            const opsData = await api<unknown>('/operations/schedules')
+            list = extractSchedulesArray(opsData)
+          }
+        }
+        if (!ignore) {
+          setSchedules(list)
+        }
+      } catch (err) {
+        if (!ignore) {
+          setErrorMessage(err instanceof Error ? err.message : 'Database query failed.')
+          setSchedules([])
+        }
+      } finally {
+        if (!ignore) {
+          setLoadingList(false)
+        }
+      }
+    }
+    load()
+    return () => {
+      ignore = true
+    }
+  }, [])
+
   function handleAddSlot() {
     if (!newSlotTime) return
     if (!dailySlots.includes(newSlotTime)) {
-      const updated作成 = [...dailySlots, newSlotTime].sort()
-      setDailySlots(updated作成)
+      const updated = [...dailySlots, newSlotTime].sort()
+      setDailySlots(updated)
     }
   }
 
@@ -121,7 +183,7 @@ export function ContentView() {
     setDailySlots(dailySlots.filter((s) => s !== slot))
   }
 
-  function applyPreset的的(presetType: 'bgmi_prime' | 'ff_squad' | 'ludo_hourly' | 'omb_duel') {
+  function applyPreset(presetType: 'bgmi_prime' | 'ff_squad' | 'ludo_hourly' | 'omb_duel') {
     if (presetType === 'bgmi_prime') {
       setCompetitionType('tournament')
       setGame('BGMI')
@@ -169,22 +231,38 @@ export function ContentView() {
     }
   }
 
-  function handleToggleScheduleStatus(id: string) {
-    const updated: DailyScheduleItem[] = schedules.map((item) => {
-      if (item.id === id) {
-        const nextStatus: 'published' | 'draft' = item.status === 'published' ? 'draft' : 'published'
-        return { ...item, status: nextStatus }
-      }
-      return item
-    })
-    saveSchedules(updated)
-    setActionSuccess('Schedule status updated.')
+  async function handleToggleScheduleStatus(id: string, currentStatus: 'published' | 'draft' | 'closed') {
+    const nextStatus: 'published' | 'draft' = currentStatus === 'published' ? 'draft' : 'published'
+    setErrorMessage('')
+    setActionSuccess('')
+
+    try {
+      await api(`/admin/competition/schedules/${id}/status`, {
+        method: 'PATCH',
+        body: JSON.stringify({ status: nextStatus }),
+      })
+      setSchedules((prev) =>
+        prev.map((item) => (item.id === id ? { ...item, status: nextStatus } : item))
+      )
+      setActionSuccess(`Schedule status updated to ${nextStatus}.`)
+    } catch (err) {
+      setErrorMessage(err instanceof Error ? err.message : 'Failed to update schedule status in database.')
+    }
   }
 
-  function handleDeleteSchedule(id: string) {
-    const updated = schedules.filter((s) => s.id !== id)
-    saveSchedules(updated)
-    setActionSuccess('Schedule removed.')
+  async function handleDeleteSchedule(id: string) {
+    setErrorMessage('')
+    setActionSuccess('')
+
+    try {
+      await api(`/admin/competition/schedules/${id}`, {
+        method: 'DELETE',
+      })
+      setSchedules((prev) => prev.filter((s) => s.id !== id))
+      setActionSuccess('Schedule removed from database.')
+    } catch (err) {
+      setErrorMessage(err instanceof Error ? err.message : 'Failed to delete schedule in database.')
+    }
   }
 
   async function handleCreateSchedule(e: FormEvent) {
@@ -217,39 +295,17 @@ export function ContentView() {
     }
 
     try {
-      let createdId = `sch_${Date.now()}`
-      try {
-        const res = await api<{ id?: string }>('/admin/competition/schedules', {
-          method: 'POST',
-          body: JSON.stringify(payload),
-        })
-        if (res && res.id) createdId = res.id
-      } catch {
-        // preserve locally
-      }
+      await api('/admin/competition/schedules', {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      })
 
-      const newSchedule: DailyScheduleItem = {
-        id: createdId,
-        game: effectiveGame,
-        title: cleanTitle,
-        type: competitionType,
-        mode,
-        entryFee: Number(entryFee) || 0,
-        prizePool: Number(prizePool) || 0,
-        maxParticipants: Number(maxSlots) || (mode === '1v1' ? 2 : 100),
-        dailySlots,
-        recurrence,
-        roomRevealMinutesBeforeStart: Number(revealTimeMinutes) || 15,
-        status: 'published',
-        createdAt: new Date().toISOString(),
-      }
-
-      const updated = [newSchedule, ...schedules]
-      saveSchedules(updated)
-      setActionSuccess(`Schedule "${cleanTitle}" created.`)
+      setActionSuccess(`Schedule "${cleanTitle}" created in database.`)
+      await fetchSchedulesFromDB()
       setActiveTab('roster')
+      setTitle('')
     } catch (err) {
-      setErrorMessage(err instanceof Error ? err.message : 'Failed to create schedule.')
+      setErrorMessage(err instanceof Error ? err.message : 'Database error: failed to create schedule.')
     } finally {
       setLoading(false)
     }
@@ -260,9 +316,17 @@ export function ContentView() {
       <div className="view-header">
         <div>
           <h2>Daily Schedules</h2>
-          <p>Recurring daily matches and tournaments</p>
+          <p>Recurring daily matches synchronized with database</p>
         </div>
         <div className="header-actions">
+          <button
+            className="secondary small-btn"
+            onClick={fetchSchedulesFromDB}
+            disabled={loadingList}
+            title="Refresh database records"
+          >
+            <RefreshCw size={14} className={loadingList ? 'spinning' : ''} />
+          </button>
           <button
             className={`tab-btn ${activeTab === 'roster' ? 'active-tab' : ''}`}
             onClick={() => setActiveTab('roster')}
@@ -293,86 +357,111 @@ export function ContentView() {
       )}
 
       {activeTab === 'roster' && (
-        <div className="schedules-grid">
-          {schedules.map((schedule) => (
-            <article
-              key={schedule.id}
-              className={`schedule-card ${schedule.status === 'draft' ? 'draft' : ''}`}
-            >
-              <div className="schedule-card-header">
-                <span className="game-badge">{schedule.game}</span>
-                <span
-                  className={`status-pill ${
-                    schedule.status === 'published' ? 'published' : 'draft'
-                  }`}
+        <>
+          {loadingList ? (
+            <div className="loading-card">
+              <RefreshCw size={24} className="spinning" color="#aa3bff" />
+              <p>Loading database schedules...</p>
+            </div>
+          ) : schedules.length === 0 ? (
+            <div className="state-card">
+              <div className="state-icon">
+                <Gamepad2 size={32} color="#aa3bff" />
+              </div>
+              <h3>No Schedules in Database</h3>
+              <p className="state-desc">
+                No recurring match schedules are currently stored in the database. Click "New Schedule" to configure and publish recurring tournaments.
+              </p>
+              <button
+                className="primary small-btn"
+                onClick={() => setActiveTab('create')}
+              >
+                <Plus size={14} /> Create First Schedule
+              </button>
+            </div>
+          ) : (
+            <div className="schedules-grid">
+              {schedules.map((schedule) => (
+                <article
+                  key={schedule.id}
+                  className={`schedule-card ${schedule.status === 'draft' ? 'draft' : ''}`}
                 >
-                  {schedule.status === 'published' ? 'Active' : 'Draft'}
-                </span>
-              </div>
-
-              <h4 className="schedule-title">{schedule.title}</h4>
-
-              <div className="schedule-meta-row">
-                <span className="badge-tag">{schedule.type.toUpperCase()}</span>
-                <span className="badge-tag">{schedule.mode}</span>
-                <span className="badge-tag">{schedule.recurrence}</span>
-              </div>
-
-              {/* Daily Slots */}
-              <div className="schedule-slots-section">
-                <span className="slots-label">Daily Slots:</span>
-                <div className="slots-chip-list">
-                  {schedule.dailySlots.map((slot) => (
-                    <span className="time-chip" key={slot}>
-                      {slot}
+                  <div className="schedule-card-header">
+                    <span className="game-badge">{schedule.game}</span>
+                    <span
+                      className={`status-pill ${
+                        schedule.status === 'published' ? 'published' : 'draft'
+                      }`}
+                    >
+                      {schedule.status === 'published' ? 'Active' : 'Draft'}
                     </span>
-                  ))}
-                </div>
-              </div>
+                  </div>
 
-              <div className="schedule-stats-grid">
-                <div className="sstat">
-                  <span>Entry Fee</span>
-                  <strong>{schedule.entryFee} Coins</strong>
-                </div>
-                <div className="sstat">
-                  <span>Prize Pool</span>
-                  <strong>₹{schedule.prizePool}</strong>
-                </div>
-                <div className="sstat">
-                  <span>Capacity</span>
-                  <strong>{schedule.maxParticipants} slots</strong>
-                </div>
-              </div>
+                  <h4 className="schedule-title">{schedule.title}</h4>
 
-              <div className="schedule-card-actions">
-                <button
-                  type="button"
-                  className="secondary small-btn"
-                  onClick={() => handleToggleScheduleStatus(schedule.id)}
-                >
-                  {schedule.status === 'published' ? (
-                    <>
-                      <PauseCircle size={13} /> Pause
-                    </>
-                  ) : (
-                    <>
-                      <PlayCircle size={13} /> Activate
-                    </>
-                  )}
-                </button>
-                <button
-                  type="button"
-                  className="danger small-btn icon-only"
-                  onClick={() => handleDeleteSchedule(schedule.id)}
-                  title="Delete Schedule"
-                >
-                  <Trash2 size={13} />
-                </button>
-              </div>
-            </article>
-          ))}
-        </div>
+                  <div className="schedule-meta-row">
+                    <span className="badge-tag">{schedule.type.toUpperCase()}</span>
+                    <span className="badge-tag">{schedule.mode}</span>
+                    <span className="badge-tag">{schedule.recurrence}</span>
+                  </div>
+
+                  {/* Daily Slots */}
+                  <div className="schedule-slots-section">
+                    <span className="slots-label">Daily Slots:</span>
+                    <div className="slots-chip-list">
+                      {schedule.dailySlots.map((slot) => (
+                        <span className="time-chip" key={slot}>
+                          {slot}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="schedule-stats-grid">
+                    <div className="sstat">
+                      <span>Entry Fee</span>
+                      <strong>{schedule.entryFee} Coins</strong>
+                    </div>
+                    <div className="sstat">
+                      <span>Prize Pool</span>
+                      <strong>₹{schedule.prizePool}</strong>
+                    </div>
+                    <div className="sstat">
+                      <span>Capacity</span>
+                      <strong>{schedule.maxParticipants} slots</strong>
+                    </div>
+                  </div>
+
+                  <div className="schedule-card-actions">
+                    <button
+                      type="button"
+                      className="secondary small-btn"
+                      onClick={() => handleToggleScheduleStatus(schedule.id, schedule.status)}
+                    >
+                      {schedule.status === 'published' ? (
+                        <>
+                          <PauseCircle size={13} /> Pause
+                        </>
+                      ) : (
+                        <>
+                          <PlayCircle size={13} /> Activate
+                        </>
+                      )}
+                    </button>
+                    <button
+                      type="button"
+                      className="danger small-btn icon-only"
+                      onClick={() => handleDeleteSchedule(schedule.id)}
+                      title="Delete Schedule"
+                    >
+                      <Trash2 size={13} />
+                    </button>
+                  </div>
+                </article>
+              ))}
+            </div>
+          )}
+        </>
       )}
 
       {activeTab === 'create' && (
@@ -385,28 +474,28 @@ export function ContentView() {
             <button
               type="button"
               className="preset-chip"
-              onClick={() => applyPreset的的('bgmi_prime')}
+              onClick={() => applyPreset('bgmi_prime')}
             >
               BGMI Prime
             </button>
             <button
               type="button"
               className="preset-chip"
-              onClick={() => applyPreset的的('ff_squad')}
+              onClick={() => applyPreset('ff_squad')}
             >
               Free Fire
             </button>
             <button
               type="button"
               className="preset-chip"
-              onClick={() => applyPreset的的('ludo_hourly')}
+              onClick={() => applyPreset('ludo_hourly')}
             >
               Ludo 1v1
             </button>
             <button
               type="button"
               className="preset-chip"
-              onClick={() => applyPreset的的('omb_duel')}
+              onClick={() => applyPreset('omb_duel')}
             >
               1v1 Duel
             </button>
@@ -571,7 +660,7 @@ export function ContentView() {
                 Cancel
               </button>
               <button type="submit" className="primary" disabled={loading}>
-                {loading ? 'Creating...' : 'Save Schedule'}
+                {loading ? 'Saving to Database...' : 'Save Schedule'}
               </button>
             </div>
           </form>

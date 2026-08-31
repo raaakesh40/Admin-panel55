@@ -2,28 +2,15 @@ import { useState, useEffect } from 'react'
 import type { FormEvent } from 'react'
 import type { Host } from '../types'
 import { api } from '../services/api'
-import { UserPlus, IndianRupee, Key, ShieldCheck, ShieldAlert, CheckCircle2, AlertCircle, RefreshCw, Trash2 } from 'lucide-react'
+import { UserPlus, IndianRupee, Key, ShieldCheck, ShieldAlert, CheckCircle2, AlertCircle, RefreshCw, Trash2, Shield } from 'lucide-react'
 
-function normalizeHost(raw: unknown): Host {
-  if (!raw || typeof raw !== 'object') {
-    return {
-      id: String(Math.random()),
-      name: 'Host',
-      username: 'host',
-      assignedGame: 'BGMI',
-      role: 'tournament',
-      status: 'active',
-      totalMatchesHosted: 0,
-      unpaidCommission: 0,
-      totalEarned: 0,
-      commissionRate: 10,
-      assignedTournaments: [],
-      createdAt: new Date().toISOString(),
-    }
-  }
+function normalizeHost(raw: unknown): Host | null {
+  if (!raw || typeof raw !== 'object') return null
 
   const r = raw as Record<string, unknown>
-  const id = String(r.id || r._id || r.userId || Math.random())
+  const id = String(r.id || r._id || r.userId || r.hostId || '')
+  if (!id) return null
+
   const username = String(r.username || r.name || 'host')
   const name = String(r.name || r.username || 'Host')
   const mobileNumber = r.mobileNumber || r.mobile_number || r.phone ? String(r.mobileNumber || r.mobile_number || r.phone) : ''
@@ -61,12 +48,20 @@ function normalizeHost(raw: unknown): Host {
 
 function extractHostArray(data: unknown): Host[] {
   if (!data) return []
-  if (Array.isArray(data)) return data.map(normalizeHost)
+  if (Array.isArray(data)) {
+    return data.map(normalizeHost).filter((h): h is Host => h !== null)
+  }
   if (typeof data === 'object') {
     const rec = data as Record<string, unknown>
-    if (Array.isArray(rec.hosts)) return rec.hosts.map(normalizeHost)
-    if (Array.isArray(rec.data)) return rec.data.map(normalizeHost)
-    if (Array.isArray(rec.users)) return rec.users.map(normalizeHost)
+    if (Array.isArray(rec.hosts)) {
+      return rec.hosts.map(normalizeHost).filter((h): h is Host => h !== null)
+    }
+    if (Array.isArray(rec.data)) {
+      return rec.data.map(normalizeHost).filter((h): h is Host => h !== null)
+    }
+    if (Array.isArray(rec.users)) {
+      return rec.users.map(normalizeHost).filter((h): h is Host => h !== null)
+    }
   }
   return []
 }
@@ -120,7 +115,7 @@ export function HostsView() {
 
       setHosts(hostList)
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Could not fetch hosts.'
+      const msg = err instanceof Error ? err.message : 'Could not query database for hosts.'
       setErrorMessage(msg)
       setHosts([])
     } finally {
@@ -131,6 +126,7 @@ export function HostsView() {
   useEffect(() => {
     let ignore = false
     async function load() {
+      setLoading(true)
       try {
         let hostList: Host[] = []
         try {
@@ -146,9 +142,13 @@ export function HostsView() {
         }
       } catch (err) {
         if (!ignore) {
-          const msg = err instanceof Error ? err.message : 'Could not fetch hosts.'
+          const msg = err instanceof Error ? err.message : 'Could not fetch hosts from database.'
           setErrorMessage(msg)
           setHosts([])
+        }
+      } finally {
+        if (!ignore) {
+          setLoading(false)
         }
       }
     }
@@ -179,7 +179,7 @@ export function HostsView() {
         }),
       })
 
-      setActionSuccess(`Host "${newHostName}" created.`)
+      setActionSuccess(`Host "${newHostName}" created in database.`)
       setShowAddModal(false)
       setNewHostName('')
       setNewHostUsername('')
@@ -188,7 +188,7 @@ export function HostsView() {
       setNewHostPassword('')
       await fetchHostsList()
     } catch (err) {
-      setErrorMessage(err instanceof Error ? err.message : 'Failed to create host.')
+      setErrorMessage(err instanceof Error ? err.message : 'Database error: Failed to create host.')
     } finally {
       setAddLoading(false)
     }
@@ -208,9 +208,9 @@ export function HostsView() {
       setHosts((prev) =>
         prev.map((h) => (h.id === host.id ? { ...h, status: nextStatus } : h))
       )
-      setActionSuccess(`Host ${host.name} marked ${nextStatus}.`)
+      setActionSuccess(`Host ${host.name} marked ${nextStatus} in database.`)
     } catch (err) {
-      setErrorMessage(err instanceof Error ? err.message : 'Failed to update host.')
+      setErrorMessage(err instanceof Error ? err.message : 'Failed to update host status in database.')
     }
   }
 
@@ -244,12 +244,12 @@ export function HostsView() {
         )
       )
 
-      setActionSuccess(`Settled ₹${amt} with ${activePayHost.name}.`)
+      setActionSuccess(`Settlement of ₹${amt} with ${activePayHost.name} recorded in database.`)
       setActivePayHost(null)
       setPayAmount('')
       setPayRef('')
     } catch (err) {
-      setErrorMessage(err instanceof Error ? err.message : 'Settlement failed.')
+      setErrorMessage(err instanceof Error ? err.message : 'Database error: Settlement failed.')
     } finally {
       setPayLoading(false)
     }
@@ -268,11 +268,11 @@ export function HostsView() {
         body: JSON.stringify({ newPassword: resetPassInput }),
       })
 
-      setActionSuccess(`Password reset for ${activeResetHost.name}.`)
+      setActionSuccess(`Password reset in database for ${activeResetHost.name}.`)
       setActiveResetHost(null)
       setResetPassInput('')
     } catch (err) {
-      setErrorMessage(err instanceof Error ? err.message : 'Password reset failed.')
+      setErrorMessage(err instanceof Error ? err.message : 'Database error: Password reset failed.')
     } finally {
       setResetLoading(false)
     }
@@ -290,10 +290,10 @@ export function HostsView() {
       })
 
       setHosts((prev) => prev.filter((h) => h.id !== hostToDelete.id))
-      setActionSuccess(`Host "${hostToDelete.name}" deleted.`)
+      setActionSuccess(`Host "${hostToDelete.name}" deleted from database.`)
       setHostToDelete(null)
     } catch (err) {
-      setErrorMessage(err instanceof Error ? err.message : 'Delete failed.')
+      setErrorMessage(err instanceof Error ? err.message : 'Database error: Delete failed.')
     } finally {
       setDeleteLoading(false)
     }
@@ -304,14 +304,14 @@ export function HostsView() {
       <div className="view-header">
         <div>
           <h2>Hosts</h2>
-          <p>Manage match organizers and commission settlements</p>
+          <p>Organizers and settlements from database</p>
         </div>
         <div className="header-actions">
           <button
             className="secondary small-btn"
             onClick={fetchHostsList}
             disabled={loading}
-            title="Refresh"
+            title="Refresh hosts from database"
           >
             <RefreshCw size={14} className={loading ? 'spinning' : ''} />
           </button>
@@ -335,10 +335,20 @@ export function HostsView() {
         </div>
       )}
 
-      {hosts.length === 0 && !loading ? (
+      {loading ? (
+        <div className="loading-card">
+          <RefreshCw size={24} className="spinning" color="#aa3bff" />
+          <p>Querying database hosts...</p>
+        </div>
+      ) : hosts.length === 0 ? (
         <div className="state-card">
-          <h3>No Hosts Added</h3>
-          <p className="state-desc">Click "Add Host" to create your first match organizer.</p>
+          <div className="state-icon">
+            <Shield size={32} color="#3699ff" />
+          </div>
+          <h3>No Hosts in Database</h3>
+          <p className="state-desc">
+            There are currently no host accounts in the database. Click "Add Host" to register an organizer.
+          </p>
         </div>
       ) : (
         <div className="hosts-grid">
@@ -531,7 +541,7 @@ export function HostsView() {
                   Cancel
                 </button>
                 <button type="submit" className="primary" disabled={addLoading}>
-                  {addLoading ? 'Saving...' : 'Add Host'}
+                  {addLoading ? 'Saving to Database...' : 'Add Host'}
                 </button>
               </div>
             </form>
@@ -590,7 +600,7 @@ export function HostsView() {
                   Cancel
                 </button>
                 <button type="submit" className="primary" disabled={payLoading}>
-                  {payLoading ? 'Processing...' : 'Confirm Payout'}
+                  {payLoading ? 'Recording Payout...' : 'Confirm Payout'}
                 </button>
               </div>
             </form>
