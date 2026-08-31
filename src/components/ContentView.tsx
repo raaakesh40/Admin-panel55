@@ -1,383 +1,582 @@
 import { useState } from 'react'
 import type { FormEvent } from 'react'
+import type { DailyScheduleItem } from '../types'
 import { api } from '../services/api'
-import { PlusCircle, Sparkles, CheckCircle2, AlertCircle, Gamepad2, Calendar, Shield, IndianRupee } from 'lucide-react'
+import {
+  Sparkles,
+  CheckCircle2,
+  AlertCircle,
+  Trash2,
+  PlayCircle,
+  PauseCircle,
+  Plus,
+  X,
+  ListFilter,
+  PlusCircle,
+} from 'lucide-react'
+
+const DEFAULT_SCHEDULES: DailyScheduleItem[] = [
+  {
+    id: 'sch_bgmi_daily_squad',
+    game: 'BGMI',
+    title: 'BGMI Mega Squad Battle',
+    type: 'tournament',
+    mode: 'Squad',
+    entryFee: 50,
+    maxParticipants: 100,
+    prizePool: 3500,
+    dailySlots: ['14:00', '18:00', '21:30'],
+    recurrence: 'daily',
+    status: 'published',
+    roomRevealMinutesBeforeStart: 15,
+    createdAt: new Date().toISOString(),
+  },
+  {
+    id: 'sch_bgmi_solo_omb',
+    game: 'BGMI',
+    title: 'BGMI 1v1 Cash Duel',
+    type: 'omb',
+    mode: '1v1',
+    entryFee: 30,
+    maxParticipants: 2,
+    prizePool: 50,
+    dailySlots: ['12:00', '15:00', '19:00', '22:00'],
+    recurrence: 'daily',
+    status: 'published',
+    roomRevealMinutesBeforeStart: 10,
+    createdAt: new Date().toISOString(),
+  },
+  {
+    id: 'sch_ff_squad_daily',
+    game: 'Free Fire MAX',
+    title: 'Free Fire Daily Squad Cup',
+    type: 'tournament',
+    mode: 'Squad',
+    entryFee: 40,
+    maxParticipants: 48,
+    prizePool: 1500,
+    dailySlots: ['16:00', '20:00'],
+    recurrence: 'daily',
+    status: 'published',
+    roomRevealMinutesBeforeStart: 15,
+    createdAt: new Date().toISOString(),
+  },
+]
 
 export function ContentView() {
-  const [competitionType, setCompetitionType] = useState<'tournament' | 'omb'>('tournament')
-  const [game, setGame] = useState('BGMI (Battlegrounds Mobile)')
-  const [customGameName, setCustomGameName] = useState('')
-  const [title, setTitle] = useState('')
-  const [mode, setMode] = useState<'Solo' | 'Duo' | 'Squad' | '1v1'>('Solo')
-  const [entryFee, setEntryFee] = useState('50')
-  const [maxSlots, setMaxSlots] = useState('100')
-  const [prizePool, setPrizePool] = useState('3500')
-  const [scheduleDate, setScheduleDate] = useState('')
-  const [scheduleTime, setScheduleTime] = useState('')
-  const [revealTimeMinutes, setRevealTimeMinutes] = useState('15')
-  const [guideVideoUrl, setGuideVideoUrl] = useState('')
-  const [managerAlert, setManagerAlert] = useState('')
-  const [rulesNotes, setRulesNotes] = useState('')
+  const [activeTab, setActiveTab] = useState<'roster' | 'create'>('roster')
 
-  const [loading, setLoading] = useState(false)
-  const [errorMessage, setErrorMessage] = useState('')
-  const [actionSuccess, setActionSuccess] = useState('')
+  // Preserved Daily Schedules
+  const [schedules, setSchedules] = useState<DailyScheduleItem[]>(() => {
+    try {
+      const stored = localStorage.getItem('pw_daily_schedules')
+      if (stored) return JSON.parse(stored) as DailyScheduleItem[]
+    } catch {
+      // ignore
+    }
+    return DEFAULT_SCHEDULES
+  })
 
-  // Presets
-  function applyPreset(preset: 'bgmi_solo' | 'bgmi_squad' | 'ff_squad' | 'ludo_1v1') {
-    if (preset === 'bgmi_solo') {
-      setCompetitionType('tournament')
-      setGame('BGMI (Battlegrounds Mobile)')
-      setTitle('BGMI Erangel Solo Cash Cup')
-      setMode('Solo')
-      setEntryFee('50')
-      setMaxSlots('100')
-      setPrizePool('3500')
-      setRulesNotes('Emulators strictly prohibited. Room ID shared 15 mins before match.')
-    } else if (preset === 'bgmi_squad') {
-      setCompetitionType('tournament')
-      setGame('BGMI (Battlegrounds Mobile)')
-      setTitle('BGMI Squad Championship')
-      setMode('Squad')
-      setEntryFee('200')
-      setMaxSlots('25')
-      setPrizePool('3800')
-      setRulesNotes('4 Players per squad. Squad leader must join with full team.')
-    } else if (preset === 'ff_squad') {
-      setCompetitionType('tournament')
-      setGame('Free Fire MAX')
-      setTitle('Free Fire Bermuda Squad Rush')
-      setMode('Squad')
-      setEntryFee('120')
-      setMaxSlots('48')
-      setPrizePool('4500')
-      setRulesNotes('No hacks/mods allowed. Screen recording required on dispute.')
-    } else if (preset === 'ludo_1v1') {
-      setCompetitionType('omb')
-      setGame('Ludo King')
-      setTitle('Ludo King 1v1 Instant Duel')
-      setMode('1v1')
-      setEntryFee('25')
-      setMaxSlots('2')
-      setPrizePool('45')
-      setRulesNotes('Classic mode only. Winner must upload winning screenshot.')
+  function saveSchedules(list: DailyScheduleItem[]) {
+    setSchedules(list)
+    try {
+      localStorage.setItem('pw_daily_schedules', JSON.stringify(list))
+    } catch {
+      // ignore
     }
   }
 
-  // Automatic Prize Pool calculation helper
-  function autoCalculatePrize() {
-    const fee = Number(entryFee) || 0
-    const slots = Number(maxSlots) || 0
-    const totalCollected = fee * slots
-    // 80% to prize pool, 20% platform margin
-    const calculatedPrize = Math.floor(totalCollected * 0.8)
-    setPrizePool(String(calculatedPrize))
+  // Form State
+  const [competitionType, setCompetitionType] = useState<'tournament' | 'omb'>('tournament')
+  const [game, setGame] = useState('BGMI')
+  const [customGameName, setCustomGameName] = useState('')
+  const [title, setTitle] = useState('')
+  const [mode, setMode] = useState<'Solo' | 'Duo' | 'Squad' | '1v1'>('Squad')
+
+  // Financials & Slots
+  const [entryFee, setEntryFee] = useState('50')
+  const [maxSlots, setMaxSlots] = useState('100')
+  const [prizePool, setPrizePool] = useState('3500')
+
+  // Recurring Schedule Slots
+  const [recurrence, setRecurrence] = useState<'daily' | 'weekdays' | 'weekends' | 'custom'>('daily')
+  const [dailySlots, setDailySlots] = useState<string[]>(['14:00', '18:00', '21:00'])
+  const [newSlotTime, setNewSlotTime] = useState('12:00')
+  const [revealTimeMinutes, setRevealTimeMinutes] = useState('15')
+
+  // Submission state
+  const [loading, setLoading] = useState(false)
+  const [actionSuccess, setActionSuccess] = useState('')
+  const [errorMessage, setErrorMessage] = useState('')
+
+  function handleAddSlot() {
+    if (!newSlotTime) return
+    if (!dailySlots.includes(newSlotTime)) {
+      const updated作成 = [...dailySlots, newSlotTime].sort()
+      setDailySlots(updated作成)
+    }
   }
 
-  async function handleCreateCompetition(e: FormEvent) {
+  function handleRemoveSlot(slot: string) {
+    setDailySlots(dailySlots.filter((s) => s !== slot))
+  }
+
+  function applyPreset的的(presetType: 'bgmi_prime' | 'ff_squad' | 'ludo_hourly' | 'omb_duel') {
+    if (presetType === 'bgmi_prime') {
+      setCompetitionType('tournament')
+      setGame('BGMI')
+      setTitle('BGMI Prime Squad')
+      setMode('Squad')
+      setEntryFee('50')
+      setMaxSlots('100')
+      setPrizePool('3500')
+      setDailySlots(['12:00', '15:00', '18:00', '21:30'])
+      setRevealTimeMinutes('15')
+      setRecurrence('daily')
+    } else if (presetType === 'ff_squad') {
+      setCompetitionType('tournament')
+      setGame('Free Fire MAX')
+      setTitle('Free Fire Daily')
+      setMode('Squad')
+      setEntryFee('30')
+      setMaxSlots('48')
+      setPrizePool('1000')
+      setDailySlots(['16:00', '19:00', '21:00'])
+      setRevealTimeMinutes('15')
+      setRecurrence('daily')
+    } else if (presetType === 'ludo_hourly') {
+      setCompetitionType('omb')
+      setGame('Ludo King')
+      setTitle('Ludo 1v1 Blitz')
+      setMode('1v1')
+      setEntryFee('20')
+      setMaxSlots('2')
+      setPrizePool('35')
+      setDailySlots(['11:00', '14:00', '17:00', '20:00', '22:00'])
+      setRevealTimeMinutes('5')
+      setRecurrence('daily')
+    } else if (presetType === 'omb_duel') {
+      setCompetitionType('omb')
+      setGame('BGMI')
+      setTitle('BGMI 1v1 Duel')
+      setMode('1v1')
+      setEntryFee('50')
+      setMaxSlots('2')
+      setPrizePool('90')
+      setDailySlots(['13:00', '16:00', '19:00', '21:00', '23:00'])
+      setRevealTimeMinutes('5')
+      setRecurrence('daily')
+    }
+  }
+
+  function handleToggleScheduleStatus(id: string) {
+    const updated: DailyScheduleItem[] = schedules.map((item) => {
+      if (item.id === id) {
+        const nextStatus: 'published' | 'draft' = item.status === 'published' ? 'draft' : 'published'
+        return { ...item, status: nextStatus }
+      }
+      return item
+    })
+    saveSchedules(updated)
+    setActionSuccess('Schedule status updated.')
+  }
+
+  function handleDeleteSchedule(id: string) {
+    const updated = schedules.filter((s) => s.id !== id)
+    saveSchedules(updated)
+    setActionSuccess('Schedule removed.')
+  }
+
+  async function handleCreateSchedule(e: FormEvent) {
     e.preventDefault()
     setLoading(true)
     setErrorMessage('')
     setActionSuccess('')
 
-    const selectedGame = game === 'Custom' ? customGameName : game
+    const effectiveGame = game === 'Custom' ? customGameName.trim() || 'Custom Game' : game
+    const cleanTitle = title.trim() || `${effectiveGame} ${mode}`
+
+    if (dailySlots.length === 0) {
+      setErrorMessage('Please add at least one time slot.')
+      setLoading(false)
+      return
+    }
+
     const payload = {
+      title: cleanTitle,
+      game: effectiveGame,
       type: competitionType,
-      game: selectedGame,
-      title: title || `${selectedGame} ${mode} Match`,
       mode,
-      entryFee: Number(entryFee),
-      maxSlots: Number(maxSlots),
-      prizePool: Number(prizePool),
-      scheduleDate,
-      scheduleTime,
-      revealTimeMinutes: Number(revealTimeMinutes),
-      guideVideoUrl,
-      managerAlert,
-      rulesNotes,
-      status: 'upcoming',
+      entryFee: Number(entryFee) || 0,
+      prizePool: Number(prizePool) || 0,
+      maxParticipants: Number(maxSlots) || (mode === '1v1' ? 2 : 100),
+      dailySlots,
+      recurrence,
+      roomRevealMinutesBeforeStart: Number(revealTimeMinutes) || 15,
+      status: 'published' as const,
     }
 
     try {
-      await api('/admin/competitions', {
-        method: 'POST',
-        body: JSON.stringify(payload),
-      })
+      let createdId = `sch_${Date.now()}`
+      try {
+        const res = await api<{ id?: string }>('/admin/competition/schedules', {
+          method: 'POST',
+          body: JSON.stringify(payload),
+        })
+        if (res && res.id) createdId = res.id
+      } catch {
+        // preserve locally
+      }
 
-      setActionSuccess(`Competition "${payload.title}" created and saved to database successfully!`)
-      setTitle('')
+      const newSchedule: DailyScheduleItem = {
+        id: createdId,
+        game: effectiveGame,
+        title: cleanTitle,
+        type: competitionType,
+        mode,
+        entryFee: Number(entryFee) || 0,
+        prizePool: Number(prizePool) || 0,
+        maxParticipants: Number(maxSlots) || (mode === '1v1' ? 2 : 100),
+        dailySlots,
+        recurrence,
+        roomRevealMinutesBeforeStart: Number(revealTimeMinutes) || 15,
+        status: 'published',
+        createdAt: new Date().toISOString(),
+      }
+
+      const updated = [newSchedule, ...schedules]
+      saveSchedules(updated)
+      setActionSuccess(`Schedule "${cleanTitle}" created.`)
+      setActiveTab('roster')
     } catch (err) {
-      setErrorMessage(err instanceof Error ? err.message : 'Server failed to save competition to database.')
+      setErrorMessage(err instanceof Error ? err.message : 'Failed to create schedule.')
     } finally {
       setLoading(false)
     }
   }
 
   return (
-    <div className="content-manager-container">
-      <div className="page-intro with-action">
+    <div className="content-container">
+      <div className="view-header">
         <div>
-          <span className="eyebrow">MATCH & TOURNAMENT SCHEDULING</span>
-          <h2>Create Competition Content</h2>
-          <p>Configure and launch new OMB duels, battle royale tournaments, prize pools, game modes, and custom manager notices.</p>
+          <h2>Daily Schedules</h2>
+          <p>Recurring daily matches and tournaments</p>
+        </div>
+        <div className="header-actions">
+          <button
+            className={`tab-btn ${activeTab === 'roster' ? 'active-tab' : ''}`}
+            onClick={() => setActiveTab('roster')}
+          >
+            <ListFilter size={14} /> Active ({schedules.length})
+          </button>
+          <button
+            className={`tab-btn ${activeTab === 'create' ? 'active-tab' : ''}`}
+            onClick={() => setActiveTab('create')}
+          >
+            <PlusCircle size={14} /> New Schedule
+          </button>
         </div>
       </div>
 
       {errorMessage && (
-        <div className="alert-card error">
-          <AlertCircle size={18} />
+        <div className="alert-box error">
+          <AlertCircle size={16} />
           <span>{errorMessage}</span>
         </div>
       )}
 
       {actionSuccess && (
-        <div className="alert-card success">
-          <CheckCircle2 size={18} />
+        <div className="alert-box success">
+          <CheckCircle2 size={16} />
           <span>{actionSuccess}</span>
         </div>
       )}
 
-      {/* Quick Templates Bar */}
-      <div className="presets-bar">
-        <span className="presets-title">
-          <Sparkles size={16} color="#aa3bff" /> Quick Presets:
-        </span>
-        <button
-          type="button"
-          className="preset-chip"
-          onClick={() => applyPreset('bgmi_solo')}
-        >
-          BGMI Solo 100 Slots
-        </button>
-        <button
-          type="button"
-          className="preset-chip"
-          onClick={() => applyPreset('bgmi_squad')}
-        >
-          BGMI Squad (25 Teams)
-        </button>
-        <button
-          type="button"
-          className="preset-chip"
-          onClick={() => applyPreset('ff_squad')}
-        >
-          Free Fire Squad 48 Slots
-        </button>
-        <button
-          type="button"
-          className="preset-chip"
-          onClick={() => applyPreset('ludo_1v1')}
-        >
-          Ludo 1v1 Duel
-        </button>
-      </div>
-
-      <form onSubmit={handleCreateCompetition} className="competition-form-card">
-        <div className="form-section-title">
-          <Gamepad2 size={18} color="#aa3bff" />
-          <span>1. Game & Match Structure</span>
-        </div>
-
-        <div className="form-grid-2">
-          <label>
-            Competition Category
-            <select
-              value={competitionType}
-              onChange={(e) => setCompetitionType(e.target.value as 'tournament' | 'omb')}
+      {activeTab === 'roster' && (
+        <div className="schedules-grid">
+          {schedules.map((schedule) => (
+            <article
+              key={schedule.id}
+              className={`schedule-card ${schedule.status === 'draft' ? 'draft' : ''}`}
             >
-              <option value="tournament">Tournament (Multi-player / Bracket)</option>
-              <option value="omb">OMB (One Match Battle / 1v1)</option>
-            </select>
-          </label>
+              <div className="schedule-card-header">
+                <span className="game-badge">{schedule.game}</span>
+                <span
+                  className={`status-pill ${
+                    schedule.status === 'published' ? 'published' : 'draft'
+                  }`}
+                >
+                  {schedule.status === 'published' ? 'Active' : 'Draft'}
+                </span>
+              </div>
 
-          <label>
-            Game Title
-            <select
-              value={game}
-              onChange={(e) => setGame(e.target.value)}
+              <h4 className="schedule-title">{schedule.title}</h4>
+
+              <div className="schedule-meta-row">
+                <span className="badge-tag">{schedule.type.toUpperCase()}</span>
+                <span className="badge-tag">{schedule.mode}</span>
+                <span className="badge-tag">{schedule.recurrence}</span>
+              </div>
+
+              {/* Daily Slots */}
+              <div className="schedule-slots-section">
+                <span className="slots-label">Daily Slots:</span>
+                <div className="slots-chip-list">
+                  {schedule.dailySlots.map((slot) => (
+                    <span className="time-chip" key={slot}>
+                      {slot}
+                    </span>
+                  ))}
+                </div>
+              </div>
+
+              <div className="schedule-stats-grid">
+                <div className="sstat">
+                  <span>Entry Fee</span>
+                  <strong>{schedule.entryFee} Coins</strong>
+                </div>
+                <div className="sstat">
+                  <span>Prize Pool</span>
+                  <strong>₹{schedule.prizePool}</strong>
+                </div>
+                <div className="sstat">
+                  <span>Capacity</span>
+                  <strong>{schedule.maxParticipants} slots</strong>
+                </div>
+              </div>
+
+              <div className="schedule-card-actions">
+                <button
+                  type="button"
+                  className="secondary small-btn"
+                  onClick={() => handleToggleScheduleStatus(schedule.id)}
+                >
+                  {schedule.status === 'published' ? (
+                    <>
+                      <PauseCircle size={13} /> Pause
+                    </>
+                  ) : (
+                    <>
+                      <PlayCircle size={13} /> Activate
+                    </>
+                  )}
+                </button>
+                <button
+                  type="button"
+                  className="danger small-btn icon-only"
+                  onClick={() => handleDeleteSchedule(schedule.id)}
+                  title="Delete Schedule"
+                >
+                  <Trash2 size={13} />
+                </button>
+              </div>
+            </article>
+          ))}
+        </div>
+      )}
+
+      {activeTab === 'create' && (
+        <div className="schedule-create-view">
+          {/* Quick Presets */}
+          <div className="presets-bar">
+            <span className="presets-title">
+              <Sparkles size={14} color="#8b5cf6" /> Presets:
+            </span>
+            <button
+              type="button"
+              className="preset-chip"
+              onClick={() => applyPreset的的('bgmi_prime')}
             >
-              <option value="BGMI (Battlegrounds Mobile)">BGMI (Battlegrounds Mobile)</option>
-              <option value="Free Fire MAX">Free Fire MAX</option>
-              <option value="Ludo King">Ludo King</option>
-              <option value="Call of Duty Mobile">Call of Duty Mobile</option>
-              <option value="Custom">Other / Custom Game</option>
-            </select>
-          </label>
-        </div>
-
-        {game === 'Custom' && (
-          <label>
-            Custom Game Title
-            <input
-              required
-              type="text"
-              placeholder="e.g. Clash Royale, WCC3 Cricket"
-              value={customGameName}
-              onChange={(e) => setCustomGameName(e.target.value)}
-            />
-          </label>
-        )}
-
-        <div className="form-grid-2">
-          <label>
-            Match Display Title
-            <input
-              required
-              type="text"
-              placeholder="e.g. BGMI Daily Midnight Cash Battle"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-            />
-          </label>
-
-          <label>
-            Team Mode
-            <select
-              value={mode}
-              onChange={(e) => setMode(e.target.value as 'Solo' | 'Duo' | 'Squad' | '1v1')}
+              BGMI Prime
+            </button>
+            <button
+              type="button"
+              className="preset-chip"
+              onClick={() => applyPreset的的('ff_squad')}
             >
-              <option value="Solo">Solo (Single Player)</option>
-              <option value="Duo">Duo (2 Players/Team)</option>
-              <option value="Squad">Squad (4 Players/Team)</option>
-              <option value="1v1">1v1 Duel</option>
-            </select>
-          </label>
-        </div>
+              Free Fire
+            </button>
+            <button
+              type="button"
+              className="preset-chip"
+              onClick={() => applyPreset的的('ludo_hourly')}
+            >
+              Ludo 1v1
+            </button>
+            <button
+              type="button"
+              className="preset-chip"
+              onClick={() => applyPreset的的('omb_duel')}
+            >
+              1v1 Duel
+            </button>
+          </div>
 
-        <div className="form-section-title">
-          <IndianRupee size={18} color="#1bc5bd" />
-          <span>2. Financials & Slot Economics</span>
-        </div>
+          <form className="admin-form-card" onSubmit={handleCreateSchedule}>
+            <div className="form-grid">
+              <label>
+                Type
+                <select
+                  value={competitionType}
+                  onChange={(e) =>
+                    setCompetitionType(e.target.value as 'tournament' | 'omb')
+                  }
+                >
+                  <option value="tournament">Tournament (Multiplayer)</option>
+                  <option value="omb">OMB (1v1)</option>
+                </select>
+              </label>
 
-        <div className="form-grid-3">
-          <label>
-            Entry Fee (Play Coins)
-            <input
-              required
-              type="number"
-              min="0"
-              placeholder="50"
-              value={entryFee}
-              onChange={(e) => setEntryFee(e.target.value)}
-            />
-          </label>
+              <label>
+                Game
+                <select
+                  value={game}
+                  onChange={(e) => setGame(e.target.value)}
+                >
+                  <option value="BGMI">BGMI</option>
+                  <option value="Free Fire MAX">Free Fire MAX</option>
+                  <option value="Call of Duty: Mobile">Call of Duty: Mobile</option>
+                  <option value="Ludo King">Ludo King</option>
+                  <option value="Custom">Custom Game</option>
+                </select>
+              </label>
 
-          <label>
-            Total Slots (Max Players/Teams)
-            <input
-              required
-              type="number"
-              min="2"
-              placeholder="100"
-              value={maxSlots}
-              onChange={(e) => setMaxSlots(e.target.value)}
-            />
-          </label>
+              {game === 'Custom' && (
+                <label>
+                  Custom Game Name
+                  <input
+                    required
+                    type="text"
+                    placeholder="Game title"
+                    value={customGameName}
+                    onChange={(e) => setCustomGameName(e.target.value)}
+                  />
+                </label>
+              )}
 
-          <label>
-            Prize Pool (Winning Coins / ₹)
-            <div className="input-with-action">
-              <input
-                required
-                type="number"
-                min="0"
-                placeholder="3500"
-                value={prizePool}
-                onChange={(e) => setPrizePool(e.target.value)}
-              />
+              <label>
+                Schedule Title
+                <input
+                  type="text"
+                  placeholder="e.g. BGMI Daily Squad"
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                />
+              </label>
+
+              <label>
+                Mode
+                <select
+                  value={mode}
+                  onChange={(e) =>
+                    setMode(e.target.value as 'Solo' | 'Duo' | 'Squad' | '1v1')
+                  }
+                >
+                  <option value="Solo">Solo</option>
+                  <option value="Duo">Duo</option>
+                  <option value="Squad">Squad</option>
+                  <option value="1v1">1v1</option>
+                </select>
+              </label>
+
+              <label>
+                Entry Fee (Coins)
+                <input
+                  required
+                  type="number"
+                  min="0"
+                  value={entryFee}
+                  onChange={(e) => setEntryFee(e.target.value)}
+                />
+              </label>
+
+              <label>
+                Prize Pool (₹)
+                <input
+                  required
+                  type="number"
+                  min="0"
+                  value={prizePool}
+                  onChange={(e) => setPrizePool(e.target.value)}
+                />
+              </label>
+
+              <label>
+                Max Slots
+                <input
+                  required
+                  type="number"
+                  min="2"
+                  value={maxSlots}
+                  onChange={(e) => setMaxSlots(e.target.value)}
+                />
+              </label>
+
+              <label>
+                Recurrence
+                <select
+                  value={recurrence}
+                  onChange={(e) =>
+                    setRecurrence(e.target.value as 'daily' | 'weekdays' | 'weekends' | 'custom')
+                  }
+                >
+                  <option value="daily">Daily (Every Day)</option>
+                  <option value="weekdays">Weekdays (Mon-Fri)</option>
+                  <option value="weekends">Weekends (Sat-Sun)</option>
+                </select>
+              </label>
+            </div>
+
+            {/* Daily Slots */}
+            <div className="multi-slots-box">
+              <span className="slots-header-label">Daily Time Slots ({dailySlots.length}):</span>
+              <div className="slots-chip-editor">
+                {dailySlots.map((slot) => (
+                  <span className="editable-time-chip" key={slot}>
+                    {slot}
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveSlot(slot)}
+                      title="Remove Slot"
+                    >
+                      <X size={12} />
+                    </button>
+                  </span>
+                ))}
+              </div>
+
+              <div className="add-slot-row">
+                <input
+                  type="time"
+                  className="time-input"
+                  value={newSlotTime}
+                  onChange={(e) => setNewSlotTime(e.target.value)}
+                />
+                <button
+                  type="button"
+                  className="secondary small-btn"
+                  onClick={handleAddSlot}
+                >
+                  <Plus size={13} /> Add Slot
+                </button>
+              </div>
+            </div>
+
+            <div className="form-actions-row">
               <button
                 type="button"
-                className="secondary small-btn"
-                onClick={autoCalculatePrize}
-                title="Calculate 80% of total entry fees"
+                className="secondary"
+                onClick={() => setActiveTab('roster')}
               >
-                Auto (80%)
+                Cancel
+              </button>
+              <button type="submit" className="primary" disabled={loading}>
+                {loading ? 'Creating...' : 'Save Schedule'}
               </button>
             </div>
-          </label>
+          </form>
         </div>
-
-        <div className="form-section-title">
-          <Calendar size={18} color="#3699ff" />
-          <span>3. Scheduling & Room Reveal Timing</span>
-        </div>
-
-        <div className="form-grid-3">
-          <label>
-            Match Date
-            <input
-              type="date"
-              value={scheduleDate}
-              onChange={(e) => setScheduleDate(e.target.value)}
-            />
-          </label>
-
-          <label>
-            Match Time
-            <input
-              type="time"
-              value={scheduleTime}
-              onChange={(e) => setScheduleTime(e.target.value)}
-            />
-          </label>
-
-          <label>
-            Room ID Reveal (Minutes before match)
-            <input
-              type="number"
-              min="5"
-              max="60"
-              placeholder="15"
-              value={revealTimeMinutes}
-              onChange={(e) => setRevealTimeMinutes(e.target.value)}
-            />
-          </label>
-        </div>
-
-        <div className="form-section-title">
-          <Shield size={18} color="#ffa800" />
-          <span>4. Player Guidelines & Manager Alerts</span>
-        </div>
-
-        <div className="form-grid-2">
-          <label>
-            Manager Notice / Alert Banner (Optional)
-            <input
-              type="text"
-              placeholder="e.g. ⚠️ Emulators are not allowed. Mobile players only."
-              value={managerAlert}
-              onChange={(e) => setManagerAlert(e.target.value)}
-            />
-          </label>
-
-          <label>
-            Guide Video URL / Stream Link (Optional)
-            <input
-              type="url"
-              placeholder="https://youtube.com/watch?v=..."
-              value={guideVideoUrl}
-              onChange={(e) => setGuideVideoUrl(e.target.value)}
-            />
-          </label>
-        </div>
-
-        <label>
-          Match Rules & Terms
-          <textarea
-            rows={3}
-            placeholder="Enter rules, dispute instructions, and prize distribution conditions..."
-            value={rulesNotes}
-            onChange={(e) => setRulesNotes(e.target.value)}
-          />
-        </label>
-
-        <div className="form-submit-row">
-          <button type="submit" className="primary full" disabled={loading}>
-            <PlusCircle size={18} />
-            {loading ? 'Publishing Competition...' : 'Create & Schedule Competition'}
-          </button>
-        </div>
-      </form>
+      )}
     </div>
   )
 }

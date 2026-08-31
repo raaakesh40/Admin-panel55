@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import type { FormEvent } from 'react'
 import type { Host } from '../types'
 import { api } from '../services/api'
-import { UserPlus, IndianRupee, Key, Shield, ShieldCheck, ShieldAlert, CheckCircle2, AlertCircle, RefreshCw, Trash2 } from 'lucide-react'
+import { UserPlus, IndianRupee, Key, ShieldCheck, ShieldAlert, CheckCircle2, AlertCircle, RefreshCw, Trash2 } from 'lucide-react'
 
 function normalizeHost(raw: unknown): Host {
   if (!raw || typeof raw !== 'object') {
@@ -28,7 +28,7 @@ function normalizeHost(raw: unknown): Host {
   const name = String(r.name || r.username || 'Host')
   const mobileNumber = r.mobileNumber || r.mobile_number || r.phone ? String(r.mobileNumber || r.mobile_number || r.phone) : ''
   const upiId = r.upiId || r.upi_id ? String(r.upiId || r.upi_id) : ''
-  const assignedGame = String(r.assignedGame || r.assigned_game || r.game || 'BGMI (Battlegrounds Mobile)')
+  const assignedGame = String(r.assignedGame || r.assigned_game || r.game || 'BGMI')
   const rawRole = String(r.role || 'tournament').toLowerCase()
   const role = rawRole.includes('omb') ? 'omb' : 'tournament'
   const rawStatus = String(r.status || 'active').toLowerCase()
@@ -84,7 +84,7 @@ export function HostsView() {
   const [newHostMobile, setNewHostMobile] = useState('')
   const [newHostUpiId, setNewHostUpiId] = useState('')
   const [newHostPassword, setNewHostPassword] = useState('')
-  const [newHostGame, setNewHostGame] = useState('BGMI (Battlegrounds Mobile)')
+  const [newHostGame, setNewHostGame] = useState('BGMI')
   const [newHostRole, setNewHostRole] = useState<'tournament' | 'omb'>('tournament')
   const [newHostCommission, setNewHostCommission] = useState('10')
   const [addLoading, setAddLoading] = useState(false)
@@ -92,9 +92,8 @@ export function HostsView() {
   // Pay Host Modal
   const [activePayHost, setActivePayHost] = useState<Host | null>(null)
   const [payAmount, setPayAmount] = useState('')
-  const [payMethod, setPayMethod] = useState('UPI / Bank Transfer')
+  const [payMethod, setPayMethod] = useState('UPI')
   const [payRef, setPayRef] = useState('')
-  const [payNote, setPayNote] = useState('')
   const [payLoading, setPayLoading] = useState(false)
 
   // Reset Password Modal
@@ -112,27 +111,17 @@ export function HostsView() {
     try {
       let hostList: Host[] = []
       try {
-        const data = await api<unknown>('/admin/hosts')
+        const data = await api<unknown>('/hosts')
         hostList = extractHostArray(data)
-      } catch (adminErr) {
-        try {
-          const fallbackData = await api<unknown>('/hosts')
-          hostList = extractHostArray(fallbackData)
-        } catch {
-          throw adminErr
-        }
+      } catch {
+        const fallbackData = await api<unknown>('/admin/hosts')
+        hostList = extractHostArray(fallbackData)
       }
 
       setHosts(hostList)
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Could not fetch hosts from server database.'
-      if (msg.includes('404')) {
-        setErrorMessage('Server Notice: The host management endpoint (/api/admin/hosts) returned 404. No host records found.')
-      } else if (msg.includes('401') || msg.toLowerCase().includes('auth')) {
-        setErrorMessage('Authentication required: Please sign in again with an admin account.')
-      } else {
-        setErrorMessage(msg)
-      }
+      const msg = err instanceof Error ? err.message : 'Could not fetch hosts.'
+      setErrorMessage(msg)
       setHosts([])
     } finally {
       setLoading(false)
@@ -145,15 +134,11 @@ export function HostsView() {
       try {
         let hostList: Host[] = []
         try {
-          const data = await api<unknown>('/admin/hosts')
+          const data = await api<unknown>('/hosts')
           hostList = extractHostArray(data)
-        } catch (adminErr) {
-          try {
-            const fallbackData = await api<unknown>('/hosts')
-            hostList = extractHostArray(fallbackData)
-          } catch {
-            throw adminErr
-          }
+        } catch {
+          const fallbackData = await api<unknown>('/admin/hosts')
+          hostList = extractHostArray(fallbackData)
         }
 
         if (!ignore) {
@@ -161,14 +146,8 @@ export function HostsView() {
         }
       } catch (err) {
         if (!ignore) {
-          const msg = err instanceof Error ? err.message : 'Could not fetch hosts from server database.'
-          if (msg.includes('404')) {
-            setErrorMessage('Server Notice: The host management endpoint (/api/admin/hosts) returned 404. No host records found.')
-          } else if (msg.includes('401') || msg.toLowerCase().includes('auth')) {
-            setErrorMessage('Authentication required: Please sign in again with an admin account.')
-          } else {
-            setErrorMessage(msg)
-          }
+          const msg = err instanceof Error ? err.message : 'Could not fetch hosts.'
+          setErrorMessage(msg)
           setHosts([])
         }
       }
@@ -185,24 +164,22 @@ export function HostsView() {
     setErrorMessage('')
     setActionSuccess('')
 
-    const payload = {
-      name: newHostName.trim(),
-      username: newHostUsername.trim(),
-      mobileNumber: newHostMobile.trim(),
-      password: newHostPassword,
-      upiId: newHostUpiId.trim(),
-      assignedGame: newHostGame,
-      commissionRate: Number(newHostCommission) || 10,
-      role: newHostRole,
-    }
-
     try {
-      await api<Host>('/admin/hosts', {
+      await api('/admin/hosts', {
         method: 'POST',
-        body: JSON.stringify(payload),
+        body: JSON.stringify({
+          name: newHostName.trim(),
+          username: newHostUsername.trim(),
+          mobileNumber: newHostMobile.trim(),
+          upiId: newHostUpiId.trim(),
+          password: newHostPassword,
+          assignedGame: newHostGame,
+          role: newHostRole,
+          commissionRate: Number(newHostCommission) || 10,
+        }),
       })
 
-      setActionSuccess(`Host "${payload.name}" created and saved to database successfully!`)
+      setActionSuccess(`Host "${newHostName}" created.`)
       setShowAddModal(false)
       setNewHostName('')
       setNewHostUsername('')
@@ -211,40 +188,68 @@ export function HostsView() {
       setNewHostPassword('')
       await fetchHostsList()
     } catch (err) {
-      setErrorMessage(err instanceof Error ? err.message : 'Server failed to create host in database.')
+      setErrorMessage(err instanceof Error ? err.message : 'Failed to create host.')
     } finally {
       setAddLoading(false)
     }
   }
 
-  async function handlePayHost(e: FormEvent) {
+  async function handleToggleStatus(host: Host) {
+    const nextStatus = host.status === 'active' ? 'suspended' : 'active'
+    setErrorMessage('')
+    setActionSuccess('')
+
+    try {
+      await api(`/admin/hosts/${host.id}/status`, {
+        method: 'PATCH',
+        body: JSON.stringify({ status: nextStatus }),
+      })
+
+      setHosts((prev) =>
+        prev.map((h) => (h.id === host.id ? { ...h, status: nextStatus } : h))
+      )
+      setActionSuccess(`Host ${host.name} marked ${nextStatus}.`)
+    } catch (err) {
+      setErrorMessage(err instanceof Error ? err.message : 'Failed to update host.')
+    }
+  }
+
+  async function handleSettlePayment(e: FormEvent) {
     e.preventDefault()
-    if (!activePayHost || !payAmount) return
+    if (!activePayHost || !payAmount || Number(payAmount) <= 0) return
     setPayLoading(true)
     setErrorMessage('')
     setActionSuccess('')
 
-    const amountNum = Number(payAmount)
-
     try {
-      await api(`/admin/hosts/${activePayHost.id}/pay`, {
+      const amt = Number(payAmount)
+      await api(`/admin/hosts/${activePayHost.id}/payout`, {
         method: 'POST',
         body: JSON.stringify({
-          amount: amountNum,
+          amount: amt,
           method: payMethod,
-          reference: payRef,
-          note: payNote,
+          referenceId: payRef.trim(),
         }),
       })
 
-      setActionSuccess(`Recorded payout of ₹${amountNum} to ${activePayHost.name} in database.`)
+      setHosts((prev) =>
+        prev.map((h) =>
+          h.id === activePayHost.id
+            ? {
+                ...h,
+                unpaidCommission: Math.max(0, h.unpaidCommission - amt),
+                totalEarned: h.totalEarned + amt,
+              }
+            : h
+        )
+      )
+
+      setActionSuccess(`Settled ₹${amt} with ${activePayHost.name}.`)
       setActivePayHost(null)
       setPayAmount('')
       setPayRef('')
-      setPayNote('')
-      await fetchHostsList()
     } catch (err) {
-      setErrorMessage(err instanceof Error ? err.message : 'Failed to record host payout on server.')
+      setErrorMessage(err instanceof Error ? err.message : 'Settlement failed.')
     } finally {
       setPayLoading(false)
     }
@@ -263,33 +268,17 @@ export function HostsView() {
         body: JSON.stringify({ newPassword: resetPassInput }),
       })
 
-      setActionSuccess(`Password reset successfully for host @${activeResetHost.username}`)
+      setActionSuccess(`Password reset for ${activeResetHost.name}.`)
       setActiveResetHost(null)
       setResetPassInput('')
     } catch (err) {
-      setErrorMessage(err instanceof Error ? err.message : 'Failed to reset password on server.')
+      setErrorMessage(err instanceof Error ? err.message : 'Password reset failed.')
     } finally {
       setResetLoading(false)
     }
   }
 
-  async function toggleHostStatus(host: Host) {
-    setErrorMessage('')
-    setActionSuccess('')
-    const newStatus = host.status === 'active' ? 'suspended' : 'active'
-    try {
-      await api(`/admin/hosts/${host.id}/status`, {
-        method: 'PATCH',
-        body: JSON.stringify({ status: newStatus }),
-      })
-      setActionSuccess(`Host @${host.username} is now ${newStatus.toUpperCase()} in database.`)
-      await fetchHostsList()
-    } catch (err) {
-      setErrorMessage(err instanceof Error ? err.message : 'Failed to update host status on server.')
-    }
-  }
-
-  async function handleConfirmDelete() {
+  async function handleDeleteHost() {
     if (!hostToDelete) return
     setDeleteLoading(true)
     setErrorMessage('')
@@ -299,11 +288,12 @@ export function HostsView() {
       await api(`/admin/hosts/${hostToDelete.id}`, {
         method: 'DELETE',
       })
-      setActionSuccess(`Host "${hostToDelete.name}" (@${hostToDelete.username}) permanently deleted from database.`)
+
+      setHosts((prev) => prev.filter((h) => h.id !== hostToDelete.id))
+      setActionSuccess(`Host "${hostToDelete.name}" deleted.`)
       setHostToDelete(null)
-      await fetchHostsList()
     } catch (err) {
-      setErrorMessage(err instanceof Error ? err.message : 'Server failed to delete host from database.')
+      setErrorMessage(err instanceof Error ? err.message : 'Delete failed.')
     } finally {
       setDeleteLoading(false)
     }
@@ -311,133 +301,117 @@ export function HostsView() {
 
   return (
     <div className="hosts-container">
-      <div className="page-intro with-action">
+      <div className="view-header">
         <div>
-          <span className="eyebrow">COMMISSION & HOST ROSTER</span>
-          <h2>Host Management</h2>
-          <p>Create match hosts, track commission payouts, reset credentials, and assign tournaments.</p>
+          <h2>Hosts</h2>
+          <p>Manage match organizers and commission settlements</p>
         </div>
-        <div className="header-btn-group">
-          <button className="secondary small-btn" onClick={fetchHostsList} disabled={loading}>
-            <RefreshCw size={14} className={loading ? 'spinning' : ''} /> Refresh
+        <div className="header-actions">
+          <button
+            className="secondary small-btn"
+            onClick={fetchHostsList}
+            disabled={loading}
+            title="Refresh"
+          >
+            <RefreshCw size={14} className={loading ? 'spinning' : ''} />
           </button>
-          <button className="primary" onClick={() => setShowAddModal(true)}>
-            <UserPlus size={16} /> Add New Host
+          <button className="primary small-btn" onClick={() => setShowAddModal(true)}>
+            <UserPlus size={14} /> Add Host
           </button>
         </div>
       </div>
 
       {errorMessage && (
-        <div className="alert-card error">
-          <AlertCircle size={18} />
+        <div className="alert-box error">
+          <AlertCircle size={16} />
           <span>{errorMessage}</span>
         </div>
       )}
 
       {actionSuccess && (
-        <div className="alert-card success">
-          <CheckCircle2 size={18} />
+        <div className="alert-box success">
+          <CheckCircle2 size={16} />
           <span>{actionSuccess}</span>
         </div>
       )}
 
       {hosts.length === 0 && !loading ? (
         <div className="state-card">
-          <div className="state-icon">
-            <Shield size={36} color="#aa3bff" />
-          </div>
-          <h3>No Host Accounts in Database</h3>
-          <p className="state-desc">
-            No organizers or match hosts are currently registered on your database. Click below to register and assign your first match host.
-          </p>
-          <button className="primary" onClick={() => setShowAddModal(true)} style={{ marginTop: '12px' }}>
-            <UserPlus size={16} /> Add First Host
-          </button>
+          <h3>No Hosts Added</h3>
+          <p className="state-desc">Click "Add Host" to create your first match organizer.</p>
         </div>
       ) : (
         <div className="hosts-grid">
           {hosts.map((host) => (
             <article className="host-card" key={host.id}>
               <div className="host-card-top">
-                <div className="host-identity">
-                  <div className="avatar host-avatar">
-                    {(host.name || host.username || 'H').slice(0, 1).toUpperCase()}
-                  </div>
+                <div className="host-profile-brief">
+                  <div className="host-avatar">{host.name.slice(0, 1).toUpperCase()}</div>
                   <div>
-                    <h4>{host.name || host.username || 'Host'}</h4>
-                    <small>@{host.username || 'host'} • {host.mobileNumber || host.upiId || 'No contact'}</small>
+                    <h4>{host.name}</h4>
+                    <span className="host-user">@{host.username} • {host.assignedGame}</span>
                   </div>
                 </div>
-                <span className={`status-pill ${host.status || 'active'}`}>
-                  {(host.status || 'active').toUpperCase()}
+                <span className={`status-pill ${host.status}`}>
+                  {host.status.toUpperCase()}
                 </span>
               </div>
 
-              <div className="host-game-tag">
-                <span>Assigned Game:</span>
-                <b>{host.assignedGame || 'BGMI (Battlegrounds Mobile)'}</b>
-              </div>
-
-              <div className="host-stats-row">
-                <div className="hstat">
-                  <span>Matches Hosted</span>
-                  <strong>{host.totalMatchesHosted ?? 0}</strong>
+              <div className="host-details-box">
+                <div className="detail-line">
+                  <span>Mobile:</span>
+                  <strong>{host.mobileNumber || 'None'}</strong>
                 </div>
-                <div className="hstat">
-                  <span>Commission Rate</span>
-                  <strong>{host.commissionRate ?? 10}%</strong>
-                </div>
-                <div className="hstat">
-                  <span>Unpaid Balance</span>
-                  <strong className={(host.unpaidCommission ?? 0) > 0 ? 'text-coral' : 'text-green'}>
-                    ₹{(host.unpaidCommission ?? 0).toLocaleString()}
-                  </strong>
-                </div>
-                <div className="hstat">
-                  <span>Total Earned</span>
-                  <strong>₹{(host.totalEarned ?? 0).toLocaleString()}</strong>
+                <div className="detail-line">
+                  <span>UPI ID:</span>
+                  <strong className="text-blue">{host.upiId || 'Not set'}</strong>
                 </div>
               </div>
 
-              <div className="host-actions-strip">
+              <div className="host-finance-row">
+                <div className="finance-box">
+                  <span>Unpaid</span>
+                  <strong className="text-green">₹{host.unpaidCommission.toLocaleString()}</strong>
+                </div>
+                <div className="finance-box">
+                  <span>Earned</span>
+                  <strong>₹{host.totalEarned.toLocaleString()}</strong>
+                </div>
+                <div className="finance-box">
+                  <span>Hosted</span>
+                  <strong>{host.totalMatchesHosted}</strong>
+                </div>
+              </div>
+
+              <div className="host-actions-bar">
                 <button
-                  className="secondary small-btn"
+                  className="primary small-btn"
                   onClick={() => {
                     setActivePayHost(host)
-                    setPayAmount((host.unpaidCommission ?? 0) > 0 ? String(host.unpaidCommission) : '')
+                    setPayAmount(String(host.unpaidCommission || ''))
                   }}
                 >
-                  <IndianRupee size={14} /> Pay Host
+                  <IndianRupee size={12} /> Pay
                 </button>
                 <button
                   className="secondary small-btn"
-                  onClick={() => {
-                    setActiveResetHost(host)
-                    setResetPassInput('')
-                  }}
+                  onClick={() => handleToggleStatus(host)}
                 >
-                  <Key size={14} /> Reset Pass
+                  {host.status === 'active' ? <ShieldAlert size={12} /> : <ShieldCheck size={12} />}
+                  {host.status === 'active' ? 'Suspend' : 'Activate'}
                 </button>
                 <button
-                  className={`small-btn ${(host.status || 'active') === 'active' ? 'secondary' : 'success'}`}
-                  onClick={() => toggleHostStatus(host)}
+                  className="secondary small-btn"
+                  onClick={() => setActiveResetHost(host)}
                 >
-                  {(host.status || 'active') === 'active' ? (
-                    <>
-                      <ShieldAlert size={14} /> Suspend
-                    </>
-                  ) : (
-                    <>
-                      <ShieldCheck size={14} /> Activate
-                    </>
-                  )}
+                  <Key size={12} /> Reset
                 </button>
                 <button
-                  className="small-btn danger"
+                  className="danger small-btn icon-only"
                   onClick={() => setHostToDelete(host)}
-                  title="Remove Host"
+                  title="Delete Host"
                 >
-                  <Trash2 size={14} /> Remove
+                  <Trash2 size={13} />
                 </button>
               </div>
             </article>
@@ -450,104 +424,103 @@ export function HostsView() {
         <div className="modal-overlay">
           <div className="modal-content">
             <div className="modal-header">
-              <h3>Create Platform Host Account</h3>
+              <h3>Add Host</h3>
               <button className="close-btn" onClick={() => setShowAddModal(false)}>
                 ✕
               </button>
             </div>
             <form onSubmit={handleCreateHost} className="modal-form">
-              <label>
-                Full Name
-                <input
-                  required
-                  type="text"
-                  placeholder="e.g. Vikram Singh"
-                  value={newHostName}
-                  onChange={(e) => setNewHostName(e.target.value)}
-                />
-              </label>
+              <div className="form-grid">
+                <label>
+                  Full Name
+                  <input
+                    required
+                    type="text"
+                    placeholder="Host Name"
+                    value={newHostName}
+                    onChange={(e) => setNewHostName(e.target.value)}
+                  />
+                </label>
 
-              <label>
-                Host Login Username
-                <input
-                  required
-                  type="text"
-                  placeholder="e.g. host_vikram"
-                  value={newHostUsername}
-                  onChange={(e) => setNewHostUsername(e.target.value)}
-                />
-              </label>
+                <label>
+                  Username
+                  <input
+                    required
+                    type="text"
+                    placeholder="username"
+                    value={newHostUsername}
+                    onChange={(e) => setNewHostUsername(e.target.value)}
+                  />
+                </label>
 
-              <label>
-                Mobile Number
-                <input
-                  required
-                  type="tel"
-                  placeholder="e.g. 9876543210"
-                  value={newHostMobile}
-                  onChange={(e) => setNewHostMobile(e.target.value)}
-                />
-              </label>
+                <label>
+                  Mobile Number
+                  <input
+                    required
+                    type="tel"
+                    placeholder="9876543210"
+                    value={newHostMobile}
+                    onChange={(e) => setNewHostMobile(e.target.value)}
+                  />
+                </label>
 
-              <label>
-                UPI ID (Required for payouts)
-                <input
-                  required
-                  type="text"
-                  placeholder="e.g. host@okaxis or 9876543210@paytm"
-                  value={newHostUpiId}
-                  onChange={(e) => setNewHostUpiId(e.target.value)}
-                />
-              </label>
+                <label>
+                  UPI ID
+                  <input
+                    type="text"
+                    placeholder="name@upi"
+                    value={newHostUpiId}
+                    onChange={(e) => setNewHostUpiId(e.target.value)}
+                  />
+                </label>
 
-              <label>
-                Initial Password
-                <input
-                  required
-                  type="password"
-                  placeholder="Create host password"
-                  value={newHostPassword}
-                  onChange={(e) => setNewHostPassword(e.target.value)}
-                />
-              </label>
+                <label>
+                  Password
+                  <input
+                    required
+                    type="password"
+                    placeholder="Password"
+                    value={newHostPassword}
+                    onChange={(e) => setNewHostPassword(e.target.value)}
+                  />
+                </label>
 
-              <label>
-                Assigned Game Title
-                <select
-                  value={newHostGame}
-                  onChange={(e) => setNewHostGame(e.target.value)}
-                >
-                  <option value="BGMI (Battlegrounds Mobile)">BGMI (Battlegrounds Mobile)</option>
-                  <option value="Free Fire MAX">Free Fire MAX</option>
-                  <option value="Ludo King">Ludo King</option>
-                  <option value="Call of Duty Mobile">Call of Duty Mobile</option>
-                  <option value="All Games">All Games (Multi-Game Host)</option>
-                </select>
-              </label>
+                <label>
+                  Game
+                  <select
+                    value={newHostGame}
+                    onChange={(e) => setNewHostGame(e.target.value)}
+                  >
+                    <option value="BGMI">BGMI</option>
+                    <option value="Free Fire MAX">Free Fire MAX</option>
+                    <option value="Call of Duty: Mobile">Call of Duty: Mobile</option>
+                    <option value="Ludo King">Ludo King</option>
+                  </select>
+                </label>
 
-              <label>
-                Host Role (System Role)
-                <select
-                  value={newHostRole}
-                  onChange={(e) => setNewHostRole(e.target.value as 'tournament' | 'omb')}
-                >
-                  <option value="tournament">Tournament Host (Tournaments & Custom Rooms)</option>
-                  <option value="omb">OMB Host (1v1 One Match Battles)</option>
-                </select>
-              </label>
+                <label>
+                  Role
+                  <select
+                    value={newHostRole}
+                    onChange={(e) => setNewHostRole(e.target.value as 'tournament' | 'omb')}
+                  >
+                    <option value="tournament">Tournament</option>
+                    <option value="omb">OMB (1v1)</option>
+                  </select>
+                </label>
 
-              <label>
-                Commission Rate (%)
-                <input
-                  required
-                  type="number"
-                  min="1"
-                  max="50"
-                  placeholder="e.g. 10"
-                  value={newHostCommission}
-                  onChange={(e) => setNewHostCommission(e.target.value)}
-                />
-              </label>
+                <label>
+                  Commission (%)
+                  <input
+                    type="number"
+                    min="0"
+                    max="100"
+                    placeholder="10"
+                    value={newHostCommission}
+                    onChange={(e) => setNewHostCommission(e.target.value)}
+                  />
+                </label>
+              </div>
 
               <div className="modal-actions">
                 <button
@@ -558,7 +531,7 @@ export function HostsView() {
                   Cancel
                 </button>
                 <button type="submit" className="primary" disabled={addLoading}>
-                  {addLoading ? 'Creating...' : 'Create Host'}
+                  {addLoading ? 'Saving...' : 'Add Host'}
                 </button>
               </div>
             </form>
@@ -566,61 +539,45 @@ export function HostsView() {
         </div>
       )}
 
-      {/* Pay Host Modal */}
+      {/* Pay Modal */}
       {activePayHost && (
         <div className="modal-overlay">
           <div className="modal-content">
             <div className="modal-header">
-              <h3>Pay Host Commission</h3>
+              <h3>Pay Host: {activePayHost.name}</h3>
               <button className="close-btn" onClick={() => setActivePayHost(null)}>
                 ✕
               </button>
             </div>
-            <p className="modal-desc">
-              Record commission settlement for <b>{activePayHost.name || activePayHost.username || 'Host'}</b> (Unpaid balance: ₹{(activePayHost.unpaidCommission ?? 0).toLocaleString()}).
-            </p>
-            <form onSubmit={handlePayHost} className="modal-form">
+            <form onSubmit={handleSettlePayment} className="modal-form">
               <label>
-                Payout Amount (₹)
+                Amount (₹)
                 <input
                   required
                   type="number"
                   min="1"
-                  placeholder="e.g. 1000"
+                  placeholder="500"
                   value={payAmount}
                   onChange={(e) => setPayAmount(e.target.value)}
                 />
               </label>
 
               <label>
-                Payment Method
-                <select
-                  value={payMethod}
-                  onChange={(e) => setPayMethod(e.target.value)}
-                >
-                  <option value="UPI / Bank Transfer">UPI / GPay / PhonePe</option>
-                  <option value="Bank NEFT / IMPS">Bank Account Transfer</option>
-                  <option value="Manual Cash Settlement">Manual Cash Settlement</option>
+                Method
+                <select value={payMethod} onChange={(e) => setPayMethod(e.target.value)}>
+                  <option value="UPI">UPI</option>
+                  <option value="Bank Transfer">Bank Transfer</option>
+                  <option value="Cash">Cash</option>
                 </select>
               </label>
 
               <label>
-                Transaction Ref / UPI UTR ID
+                Reference / UTR
                 <input
                   type="text"
-                  placeholder="e.g. UPI/482910398402"
+                  placeholder="Transaction UTR"
                   value={payRef}
                   onChange={(e) => setPayRef(e.target.value)}
-                />
-              </label>
-
-              <label>
-                Notes / Audit Remark
-                <input
-                  type="text"
-                  placeholder="e.g. Weekly match hosting payout"
-                  value={payNote}
-                  onChange={(e) => setPayNote(e.target.value)}
                 />
               </label>
 
@@ -646,14 +603,11 @@ export function HostsView() {
         <div className="modal-overlay">
           <div className="modal-content">
             <div className="modal-header">
-              <h3>Reset Host Password</h3>
+              <h3>Reset Password ({activeResetHost.name})</h3>
               <button className="close-btn" onClick={() => setActiveResetHost(null)}>
                 ✕
               </button>
             </div>
-            <p className="modal-desc">
-              Enter a new secure password for host <b>@{activeResetHost.username}</b>.
-            </p>
             <form onSubmit={handleResetPassword} className="modal-form">
               <label>
                 New Password
@@ -675,7 +629,7 @@ export function HostsView() {
                   Cancel
                 </button>
                 <button type="submit" className="primary" disabled={resetLoading}>
-                  {resetLoading ? 'Updating...' : 'Set Password'}
+                  {resetLoading ? 'Saving...' : 'Update Password'}
                 </button>
               </div>
             </form>
@@ -683,47 +637,34 @@ export function HostsView() {
         </div>
       )}
 
-      {/* Delete Host Confirmation Modal */}
+      {/* Delete Host Modal */}
       {hostToDelete && (
         <div className="modal-overlay">
           <div className="modal-content">
             <div className="modal-header">
-              <h3>Delete Host Account</h3>
+              <h3>Delete Host</h3>
               <button className="close-btn" onClick={() => setHostToDelete(null)}>
                 ✕
               </button>
             </div>
-            <div className="modal-desc" style={{ textAlign: 'left', lineHeight: 1.5 }}>
-              <p>Are you sure you want to permanently remove host <b>{hostToDelete.name || hostToDelete.username || 'Host'}</b> (<b>@{hostToDelete.username || 'host'}</b>)?</p>
-              <div style={{ marginTop: '12px', padding: '12px', background: 'var(--surface-muted)', borderRadius: '8px', fontSize: '13px' }}>
-                <div>🎮 <b>Assigned Game:</b> {hostToDelete.assignedGame || 'BGMI'}</div>
-                <div>📊 <b>Matches Hosted:</b> {hostToDelete.totalMatchesHosted ?? 0}</div>
-                <div>💰 <b>Unpaid Commission:</b> ₹{(hostToDelete.unpaidCommission ?? 0).toLocaleString()}</div>
-              </div>
-              {(hostToDelete.unpaidCommission ?? 0) > 0 && (
-                <div style={{ marginTop: '10px', color: 'var(--coral-color)', fontSize: '12px', fontWeight: 600 }}>
-                  ⚠️ Warning: This host still has ₹{(hostToDelete.unpaidCommission ?? 0).toLocaleString()} unpaid commission balance.
-                </div>
-              )}
-            </div>
-            <div className="modal-actions" style={{ marginTop: '20px' }}>
+            <p className="modal-desc">
+              Are you sure you want to delete host <b>{hostToDelete.name}</b> (@{hostToDelete.username})?
+            </p>
+            <div className="modal-actions">
               <button
                 type="button"
                 className="secondary"
                 onClick={() => setHostToDelete(null)}
-                disabled={deleteLoading}
               >
                 Cancel
               </button>
               <button
                 type="button"
-                className="small-btn danger"
-                style={{ padding: '10px 20px', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
-                onClick={handleConfirmDelete}
+                className="danger"
+                onClick={handleDeleteHost}
                 disabled={deleteLoading}
               >
-                <Trash2 size={16} />
-                {deleteLoading ? 'Deleting...' : 'Permanently Delete'}
+                {deleteLoading ? 'Deleting...' : 'Delete Host'}
               </button>
             </div>
           </div>

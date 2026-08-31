@@ -19,24 +19,18 @@ export function OverviewView({ dashboard, error, retry, isRefreshing, onSignOut 
     return (
       <div className="state-card error-state">
         <div className="state-icon">
-          <AlertTriangle size={36} color="#f64e60" />
+          <AlertTriangle size={32} color="#f64e60" />
         </div>
-        <h2>Dashboard Unavailable</h2>
+        <h2>Connection Error</h2>
         <p className="state-desc">{error}</p>
-        <div className="state-tip">
-          <span>{isAuthError ? 'Session Notice:' : 'Tip:'}</span>{' '}
-          {isAuthError
-            ? 'Your admin backend session token is missing, invalid, or expired on https://api.pagewoga.online.'
-            : 'Check server connection or click below to retry.'}
-        </div>
-        <div className="header-btn-group" style={{ marginTop: '12px' }}>
+        <div className="header-btn-group">
           <button className="primary small-btn" onClick={retry} disabled={isRefreshing}>
             <RefreshCw size={14} className={isRefreshing ? 'spinning' : ''} />
-            {isRefreshing ? 'Retrying...' : 'Retry Connection'}
+            {isRefreshing ? 'Retrying...' : 'Retry'}
           </button>
           {isAuthError && onSignOut && (
             <button className="secondary small-btn" onClick={onSignOut}>
-              <LogIn size={14} /> Sign In Again
+              <LogIn size={14} /> Re-login
             </button>
           )}
         </div>
@@ -47,8 +41,8 @@ export function OverviewView({ dashboard, error, retry, isRefreshing, onSignOut 
   if (!dashboard) {
     return (
       <div className="loading-card">
-        <RefreshCw size={28} className="spinning" color="#aa3bff" />
-        <p>Loading live metrics from server...</p>
+        <RefreshCw size={24} className="spinning" color="#aa3bff" />
+        <p>Loading metrics...</p>
       </div>
     )
   }
@@ -64,32 +58,28 @@ export function OverviewView({ dashboard, error, retry, isRefreshing, onSignOut 
 
   const metricCards = [
     {
-      title: 'Total Users',
+      title: 'Users',
       value: (totals.users ?? 0).toLocaleString(),
-      hint: 'Registered active accounts',
-      icon: <Users size={22} color="#aa3bff" />,
-      tag: 'Users',
+      hint: 'Registered players',
+      icon: <Users size={20} color="#aa3bff" />,
     },
     {
-      title: 'Active Hosts',
+      title: 'Hosts',
       value: (totals.hosts ?? 0).toLocaleString(),
-      hint: 'OMB + Tournament organizers',
-      icon: <Shield size={22} color="#3699ff" />,
-      tag: 'Hosts',
+      hint: 'Active organizers',
+      icon: <Shield size={20} color="#3699ff" />,
     },
     {
-      title: 'Play Coins in Circulation',
+      title: 'Play Coins',
       value: (totals.playCoins ?? 0).toLocaleString(),
-      hint: 'Deposit & game play balance',
-      icon: <Coins size={22} color="#ffa800" />,
-      tag: 'Play Coins',
+      hint: 'Platform balance',
+      icon: <Coins size={20} color="#ffa800" />,
     },
     {
-      title: 'Winning Coins Balance',
+      title: 'Winning Coins',
       value: (totals.winningCoins ?? 0).toLocaleString(),
-      hint: 'Available for withdrawal',
-      icon: <Trophy size={22} color="#1bc5bd" />,
-      tag: 'Winnings',
+      hint: 'Withdrawable pool',
+      icon: <Trophy size={20} color="#1bc5bd" />,
     },
   ]
 
@@ -97,13 +87,12 @@ export function OverviewView({ dashboard, error, retry, isRefreshing, onSignOut 
     <div className="overview-container">
       <div className="welcome-banner">
         <div>
-          <span className="eyebrow">LIVE PLATFORM SNAPSHOT</span>
-          <h2>Platform Overview & Metrics</h2>
-          <p>Real-time analytics aggregated from Pagewoga AWS EC2 and RDS database.</p>
+          <h2>Platform Overview</h2>
+          <p>Real-time system stats</p>
         </div>
         <div className="live-status-badge">
           <span className="live-dot" />
-          <span>PRODUCTION LIVE</span>
+          <span>Live</span>
         </div>
       </div>
 
@@ -115,112 +104,43 @@ export function OverviewView({ dashboard, error, retry, isRefreshing, onSignOut 
               <div className="metric-icon-box">{card.icon}</div>
             </div>
             <strong className="metric-value">{card.value}</strong>
-            <div className="metric-hint">
-              <span className="badge-subtle">{card.tag}</span>
-              <small>{card.hint}</small>
-            </div>
+            <span className="metric-sub">{card.hint}</span>
           </article>
         ))}
       </div>
 
       <div className="section-divider">
-        <div>
-          <span className="eyebrow">MONTHLY OPERATIONS</span>
-          <h3>Cancellation & Dispute Pulse</h3>
-        </div>
-        <span className="period-chip">Live 30-Day Window</span>
+        <h3>Operations</h3>
+        <span className="period-chip">30 Days</span>
       </div>
 
       <div className="chart-grid">
         <article className="pulse-card coral-pulse">
           <div className="pulse-header">
             <div className="pulse-title">
-              <TrendingDown size={20} color="#f64e60" />
+              <TrendingDown size={18} color="#f64e60" />
               <span>OMB Cancellations</span>
             </div>
             <strong>{(totals.cancelledOmbs ?? 0).toLocaleString()}</strong>
           </div>
-          <div className="pulse-footer" style={{ marginTop: '12px' }}>
-            <small>Dispute & Cancellation Count: {(totals.cancelledOmbs ?? 0)}</small>
-            <span>Auto-refunded to Play Coins</span>
+          <div className="pulse-footer">
+            <small>Refunded to Play Coins</small>
           </div>
         </article>
 
         <article className="pulse-card teal-pulse">
           <div className="pulse-header">
             <div className="pulse-title">
-              <TrendingDown size={20} color="#1bc5bd" />
+              <TrendingDown size={18} color="#1bc5bd" />
               <span>Tournament Cancellations</span>
             </div>
             <strong>{(totals.cancelledTournaments ?? 0).toLocaleString()}</strong>
           </div>
-          <div className="pulse-footer" style={{ marginTop: '12px' }}>
-            <small>Cancelled Tournament Count: {(totals.cancelledTournaments ?? 0)}</small>
-            <span>Slot fees returned immediately</span>
+          <div className="pulse-footer">
+            <small>Slot fees returned</small>
           </div>
         </article>
       </div>
-
-      <div className="section-divider">
-        <div>
-          <span className="eyebrow">FINANCIAL LEADERBOARDS</span>
-          <h3>Top Player Transactions</h3>
-        </div>
-      </div>
-
-      <div className="leader-grid">
-        <LeaderboardCard
-          title="Top Deposits (Play Coins)"
-          badge="Deposits"
-          rows={dashboard.topDeposits || []}
-          emptyText="No deposit records found in this cycle."
-        />
-        <LeaderboardCard
-          title="Top Withdrawals (Winning Coins)"
-          badge="Payouts"
-          rows={dashboard.topWithdrawals || []}
-          emptyText="No withdrawal records found in this cycle."
-        />
-      </div>
     </div>
-  )
-}
-
-function LeaderboardCard({
-  title,
-  badge,
-  rows,
-  emptyText,
-}: {
-  title: string
-  badge: string
-  rows: { userId: string; userName?: string; total: number }[]
-  emptyText: string
-}) {
-  return (
-    <article className="leader-card">
-      <div className="leader-card-header">
-        <h4>{title}</h4>
-        <span className="badge-tag">{badge}</span>
-      </div>
-      <div className="leader-list">
-        {rows && rows.length > 0 ? (
-          rows.slice(0, 5).map((row, index) => (
-            <div className="leader-item" key={row.userId || index}>
-              <div className="leader-rank">#{index + 1}</div>
-              <div className="leader-info">
-                <span className="leader-name">{row.userName || `User ${row.userId.slice(0, 8)}`}</span>
-                <small className="leader-id">{row.userId}</small>
-              </div>
-              <strong className="leader-amount">₹{(row.total ?? 0).toLocaleString()}</strong>
-            </div>
-          ))
-        ) : (
-          <div className="leader-empty">
-            <p>{emptyText}</p>
-          </div>
-        )}
-      </div>
-    </article>
   )
 }

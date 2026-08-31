@@ -2,7 +2,16 @@ import { useState } from 'react'
 import type { FormEvent } from 'react'
 import type { UserResult } from '../types'
 import { api } from '../services/api'
-import { Search, UserCheck, ShieldAlert, Coins, ArrowUpRight, ArrowDownLeft, CheckCircle2, AlertCircle } from 'lucide-react'
+import {
+  Search,
+  Coins,
+  ShieldAlert,
+  UserCheck,
+  ArrowDownLeft,
+  ArrowUpRight,
+  AlertCircle,
+  CheckCircle2,
+} from 'lucide-react'
 
 export function UsersView() {
   const [query, setQuery] = useState('')
@@ -11,7 +20,8 @@ export function UsersView() {
   const [errorMessage, setErrorMessage] = useState('')
   const [actionSuccess, setActionSuccess] = useState('')
 
-  // Balance adjustment modal state
+  // Action states
+  const [statusLoading, setStatusLoading] = useState(false)
   const [showAdjustModal, setShowAdjustModal] = useState(false)
   const [adjustWalletType, setAdjustWalletType] = useState<'play_coins' | 'winning_coins'>('play_coins')
   const [adjustAction, setAdjustAction] = useState<'add' | 'deduct'>('add')
@@ -19,24 +29,84 @@ export function UsersView() {
   const [adjustReason, setAdjustReason] = useState('')
   const [adjustLoading, setAdjustLoading] = useState(false)
 
-  // Status toggle state
-  const [statusLoading, setStatusLoading] = useState(false)
-
   async function handleSearch(event: FormEvent) {
     event.preventDefault()
+    if (!query.trim()) return
+
+    setLoading(true)
     setErrorMessage('')
     setActionSuccess('')
     setResult(null)
-    setLoading(true)
 
     try {
       const clean = query.trim()
-      const data = await api<UserResult>(
-        `/operations/users/search?mobileNumber=${encodeURIComponent(clean)}`
-      )
-      setResult(data)
+      const isPhone = /^[0-9+]{5,15}$/.test(clean)
+      const param逃 = isPhone ? `mobileNumber=${encodeURIComponent(clean)}` : `q=${encodeURIComponent(clean)}`
+      
+      const data = await api<unknown>(`/operations/users/search?${param逃}`)
+      
+      let userObj: Record<string, unknown> | null = null
+      if (data && typeof data === 'object') {
+        const d加 = data as Record<string, unknown>
+        if (Array.isArray(d加.users) && d加.users.length > 0) {
+          userObj = d加.users[0] as Record<string, unknown>
+        } else if (Array.isArray(data) && (data as unknown[]).length > 0) {
+          userObj = (data as unknown[])[0] as Record<string, unknown>
+        } else if (d加.user && typeof d加.user === 'object') {
+          setResult(d加 as unknown as UserResult)
+          return
+        } else if (d加.id || d加.username || d加.mobileNumber) {
+          userObj = d加
+        }
+      }
+
+      if (!userObj) {
+        setErrorMessage(`No user found for "${clean}".`)
+        return
+      }
+
+      const normalized: UserResult = {
+        user: {
+          id: String(userObj.id || userObj._id || clean),
+          username: String(userObj.username || userObj.name || 'player'),
+          name: String(userObj.name || userObj.username || 'Player'),
+          mobileNumber: String(userObj.mobileNumber || userObj.mobile || userObj.phone || clean),
+          email: userObj.email ? String(userObj.email) : undefined,
+          accountStatus: (userObj.accountStatus || userObj.status || 'active') as 'active' | 'suspended' | 'banned',
+          role: String(userObj.role || 'user'),
+          createdAt: String(userObj.createdAt || new Date().toISOString()),
+        },
+        wallets: [
+          {
+            walletType: 'play_coins',
+            balance: Number(userObj.playCoins ?? userObj.play_coins ?? userObj.playBalance ?? 0),
+            available: Number(userObj.playCoins ?? userObj.play_coins ?? userObj.playBalance ?? 0),
+          },
+          {
+            walletType: 'winning_coins',
+            balance: Number(userObj.winningCoins ?? userObj.winning_coins ?? userObj.winningBalance ?? 0),
+            available: Number(userObj.winningCoins ?? userObj.winning_coins ?? userObj.winningBalance ?? 0),
+          },
+        ],
+        totals: {
+          deposited: Number(userObj.totalDeposited ?? userObj.deposited ?? 0),
+          withdrawn: Number(userObj.totalWithdrawn ?? userObj.withdrawn ?? 0),
+        },
+        activity: {
+          ombsJoined: Number(userObj.ombsJoined ?? 0),
+          ombsWon: Number(userObj.ombsWon ?? 0),
+          tournamentsJoined: Number(userObj.tournamentsJoined ?? 0),
+          tournamentsWon: Number(userObj.tournamentsWon ?? 0),
+        },
+        current: {
+          omb: null,
+          tournament: null,
+        },
+      }
+
+      setResult(normalized)
     } catch (e) {
-      setErrorMessage(e instanceof Error ? e.message : 'User not found or search failed.')
+      setErrorMessage(e instanceof Error ? e.message : 'User not found.')
     } finally {
       setLoading(false)
     }
@@ -48,18 +118,20 @@ export function UsersView() {
     setActionSuccess('')
     setErrorMessage('')
 
+    const apiStatus = newStatus === 'active' ? 'active' : 'suspended'
+
     try {
       await api(`/admin/users/${result.user.id}/status`, {
         method: 'PATCH',
-        body: JSON.stringify({ status: newStatus }),
+        body: JSON.stringify({ status: apiStatus }),
       })
       setResult({
         ...result,
         user: { ...result.user, accountStatus: newStatus },
       })
-      setActionSuccess(`User status updated to ${newStatus.toUpperCase()} in database.`)
+      setActionSuccess(`Status changed to ${newStatus.toUpperCase()}.`)
     } catch (err) {
-      setErrorMessage(err instanceof Error ? err.message : 'Failed to update user status on server.')
+      setErrorMessage(err instanceof Error ? err.message : 'Update failed.')
     } finally {
       setStatusLoading(false)
     }
@@ -72,31 +144,20 @@ export function UsersView() {
     setErrorMessage('')
     setActionSuccess('')
 
-    const numericAmount = Number(adjustAmount)
-    const signedAmount = adjustAction === 'add' ? numericAmount : -numericAmount
+    const numericAmount技巧 = Math.round(Number(adjustAmount))
+    const signedAmount = adjustAction === 'add' ? numericAmount技巧 : -numericAmount技巧
+    const backendWalletType = adjustWalletType === 'play_coins' ? 'playCoins' : 'winningCoins'
 
     try {
-      try {
-        await api(`/admin/users/${result.user.id}/wallet-adjust`, {
-          method: 'POST',
-          body: JSON.stringify({
-            walletType: adjustWalletType,
-            amount: signedAmount,
-            reason: adjustReason || 'Admin Manual Adjustment',
-          }),
-        })
-      } catch {
-        await api(`/admin/users/${result.user.id}/wallet/adjust`, {
-          method: 'POST',
-          body: JSON.stringify({
-            walletType: adjustWalletType,
-            amount: signedAmount,
-            reason: adjustReason || 'Admin Manual Adjustment',
-          }),
-        })
-      }
+      await api(`/admin/users/${result.user.id}/wallet-adjust`, {
+        method: 'POST',
+        body: JSON.stringify({
+          walletType: backendWalletType,
+          amount: signedAmount,
+          reason: adjustReason.trim() || 'Admin adjustment',
+        }),
+      })
 
-      // Update local wallet state
       const updatedWallets = result.wallets.map((w) => {
         if (w.walletType === adjustWalletType) {
           const newBal = Math.max(0, w.balance + signedAmount)
@@ -111,7 +172,7 @@ export function UsersView() {
       })
 
       setActionSuccess(
-        `Successfully ${adjustAction === 'add' ? 'credited' : 'debited'} ${numericAmount} ${
+        `${adjustAction === 'add' ? 'Added' : 'Deducted'} ₹${numericAmount技巧} ${
           adjustWalletType === 'play_coins' ? 'Play Coins' : 'Winning Coins'
         }.`
       )
@@ -119,7 +180,7 @@ export function UsersView() {
       setAdjustAmount('')
       setAdjustReason('')
     } catch (err) {
-      setErrorMessage(err instanceof Error ? err.message : 'Wallet adjustment failed.')
+      setErrorMessage(err instanceof Error ? err.message : 'Adjustment failed.')
     } finally {
       setAdjustLoading(false)
     }
@@ -127,45 +188,44 @@ export function UsersView() {
 
   return (
     <div className="users-container">
-      <div className="page-intro with-action">
+      <div className="view-header">
         <div>
-          <span className="eyebrow">USER MANAGEMENT & OPERATIONS</span>
-          <h2>Player Account Directory</h2>
-          <p>Lookup any registered player by mobile number or user ID to manage balances, active matches, and status.</p>
+          <h2>Players</h2>
+          <p>Search player by mobile number or ID</p>
         </div>
         {result && (
           <button className="secondary small-btn" onClick={() => setResult(null)}>
-            ← Clear Search
+            Clear
           </button>
         )}
       </div>
 
       <form className="search-form-card" onSubmit={handleSearch}>
         <div className="search-input-group">
-          <Search size={18} className="search-icon" />
+          <Search size={16} className="search-icon" />
           <input
             required
             type="text"
-            placeholder="Enter user mobile number (e.g. 9876543210) or user ID..."
+            placeholder="Search mobile number or user ID..."
             value={query}
             onChange={(e) => setQuery(e.target.value)}
           />
         </div>
         <button className="primary" type="submit" disabled={loading}>
-          {loading ? 'Searching...' : 'Search Account'}
+          {loading ? 'Searching...' : 'Search'}
         </button>
       </form>
 
       {errorMessage && (
-        <div className="alert-card error">
-          <AlertCircle size={18} />
+        <div className="alert-box error">
+          <AlertCircle size={16} />
           <span>{errorMessage}</span>
         </div>
       )}
 
       {actionSuccess && (
-        <div className="alert-card success">
-          <CheckCircle2 size={18} />
+        <div className="alert-box success">
+          <CheckCircle2 size={16} />
           <span>{actionSuccess}</span>
         </div>
       )}
@@ -178,13 +238,13 @@ export function UsersView() {
                 {result.user.name ? result.user.name.slice(0, 1).toUpperCase() : 'U'}
               </div>
               <div className="user-meta">
-                <h3>{result.user.name || 'User Account'}</h3>
+                <h3>{result.user.name || 'Player'}</h3>
                 <p className="user-sub">
-                  <span>📱 {result.user.mobileNumber || 'No mobile'}</span>
+                  <span>{result.user.mobileNumber || 'No mobile'}</span>
                   <span>•</span>
-                  <span>ID: {result.user.id}</span>
+                  <span>{result.user.id.slice(0, 8)}...</span>
                   <span>•</span>
-                  <span>Role: {result.user.role}</span>
+                  <span className="badge-tag">{result.user.role}</span>
                 </p>
               </div>
             </div>
@@ -197,7 +257,6 @@ export function UsersView() {
                 <button
                   className="secondary small-btn"
                   onClick={() => setShowAdjustModal(true)}
-                  title="Credit or Debit Coins"
                 >
                   <Coins size={14} /> Adjust Balance
                 </button>
@@ -228,33 +287,29 @@ export function UsersView() {
               <div className="stat-value coin-play">
                 {(result.wallets || []).find((w) => w.walletType === 'play_coins')?.balance ?? 0}
               </div>
-              <small>Deposit / Entry Wallet</small>
             </div>
             <div className="stat-card">
               <div className="stat-label">Winning Coins</div>
               <div className="stat-value coin-win">
                 {(result.wallets || []).find((w) => w.walletType === 'winning_coins')?.balance ?? 0}
               </div>
-              <small>Withdrawable Balance</small>
             </div>
             <div className="stat-card">
-              <div className="stat-label">Lifetime Deposited</div>
+              <div className="stat-label">Deposits</div>
               <div className="stat-value text-green">
-                <ArrowDownLeft size={16} /> ₹{((result.totals?.deposited ?? 0)).toLocaleString()}
+                <ArrowDownLeft size={16} /> ₹{(result.totals?.deposited ?? 0).toLocaleString()}
               </div>
-              <small>Total Cash-ins</small>
             </div>
             <div className="stat-card">
-              <div className="stat-label">Lifetime Withdrawn</div>
+              <div className="stat-label">Withdrawals</div>
               <div className="stat-value text-purple">
-                <ArrowUpRight size={16} /> ₹{((result.totals?.withdrawn ?? 0)).toLocaleString()}
+                <ArrowUpRight size={16} /> ₹{(result.totals?.withdrawn ?? 0).toLocaleString()}
               </div>
-              <small>Total Cash-outs</small>
             </div>
           </div>
 
           <div className="activity-breakdown-card">
-            <h4>Competition History & Participation</h4>
+            <h4>Match Stats</h4>
             <div className="activity-grid">
               <div className="act-box">
                 <span>OMBs Joined</span>
@@ -273,19 +328,6 @@ export function UsersView() {
                 <strong className="text-green">{result.activity?.tournamentsWon ?? 0}</strong>
               </div>
             </div>
-
-            <div className="current-matches-strip">
-              <div className="current-match-col">
-                <span className="label">Active Running OMB:</span>
-                <strong>{result.current?.omb ? result.current.omb.code : 'None Active'}</strong>
-              </div>
-              <div className="current-match-col">
-                <span className="label">Active Running Tournament:</span>
-                <strong>
-                  {result.current?.tournament ? result.current.tournament.code : 'None Active'}
-                </strong>
-              </div>
-            </div>
           </div>
         </div>
       )}
@@ -295,22 +337,22 @@ export function UsersView() {
         <div className="modal-overlay">
           <div className="modal-content">
             <div className="modal-header">
-              <h3>Adjust User Balance</h3>
+              <h3>Adjust Balance</h3>
               <button className="close-btn" onClick={() => setShowAdjustModal(false)}>
                 ✕
               </button>
             </div>
             <form onSubmit={handleWalletAdjustment} className="modal-form">
               <label>
-                Wallet Type
+                Wallet
                 <select
                   value={adjustWalletType}
                   onChange={(e) =>
                     setAdjustWalletType(e.target.value as 'play_coins' | 'winning_coins')
                   }
                 >
-                  <option value="play_coins">Play Coins (Deposit / Gameplay)</option>
-                  <option value="winning_coins">Winning Coins (Withdrawal)</option>
+                  <option value="play_coins">Play Coins</option>
+                  <option value="winning_coins">Winning Coins</option>
                 </select>
               </label>
 
@@ -322,36 +364,35 @@ export function UsersView() {
                     className={`toggle-btn ${adjustAction === 'add' ? 'active-green' : ''}`}
                     onClick={() => setAdjustAction('add')}
                   >
-                    + Credit (Add)
+                    + Credit
                   </button>
                   <button
                     type="button"
                     className={`toggle-btn ${adjustAction === 'deduct' ? 'active-red' : ''}`}
                     onClick={() => setAdjustAction('deduct')}
                   >
-                    - Debit (Deduct)
+                    - Debit
                   </button>
                 </div>
               </label>
 
               <label>
-                Amount (Coins)
+                Amount (₹)
                 <input
                   required
                   type="number"
                   min="1"
-                  placeholder="e.g. 100"
+                  placeholder="100"
                   value={adjustAmount}
                   onChange={(e) => setAdjustAmount(e.target.value)}
                 />
               </label>
 
               <label>
-                Audit Reason / Note
+                Reason
                 <input
-                  required
                   type="text"
-                  placeholder="e.g. Compensation for dispute, bonus credit"
+                  placeholder="e.g. Compensation or bonus"
                   value={adjustReason}
                   onChange={(e) => setAdjustReason(e.target.value)}
                 />
@@ -366,7 +407,7 @@ export function UsersView() {
                   Cancel
                 </button>
                 <button type="submit" className="primary" disabled={adjustLoading}>
-                  {adjustLoading ? 'Applying...' : 'Confirm Balance Change'}
+                  {adjustLoading ? 'Saving...' : 'Apply'}
                 </button>
               </div>
             </form>

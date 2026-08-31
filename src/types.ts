@@ -36,6 +36,7 @@ export type Wallet = {
   walletType: 'play_coins' | 'winning_coins' | string
   balance: number
   available: number
+  held?: number
 }
 
 export type UserRole = 'user' | 'admin' | 'manager' | 'support' | 'omb_host' | 'tournament_host' | string
@@ -114,10 +115,31 @@ export type NotificationBroadcast = {
   message: string
   targetAudience: 'all' | 'active_players' | 'hosts' | 'specific_user'
   targetUserId?: string
-  type: 'announcement' | 'match_alert' | 'bonus' | 'maintenance'
-  priority: 'high' | 'normal'
+  userId?: string
+  type: 'announcement' | 'match_alert' | 'bonus' | 'maintenance' | string
+  priority: 'high' | 'normal' | string
   deepLink?: string
   sentAt: string
-  sentBy: string
-  status: 'delivered' | 'pending' | 'failed'
+  sentBy?: string
+  status?: 'delivered' | 'pending' | 'failed'
+  deliveredCount?: number
+}
+
+export type DailyScheduleItem = {
+  id: string
+  modeId?: string
+  game: string
+  title: string
+  type: 'omb' | 'tournament'
+  mode: 'Solo' | 'Duo' | 'Squad' | '1v1'
+  entryFee: number
+  maxParticipants: number
+  prizePool: number
+  dailySlots: string[]
+  recurrence: 'daily' | 'weekdays' | 'weekends' | 'custom'
+  status: 'published' | 'draft' | 'closed'
+  roomRevealMinutesBeforeStart?: number
+  managerAlert?: string
+  rulesNotes?: string
+  createdAt: string
 }

@@ -373,11 +373,11 @@ export function App() {
 
   const navItems: { id: typeof page; label: string; icon: React.ReactNode }[] = [
     { id: 'Overview', label: 'Overview', icon: <LayoutDashboard size={18} /> },
-    { id: 'Users', label: 'Users', icon: <Users size={18} /> },
-    { id: 'Competitions', label: 'Competitions', icon: <Trophy size={18} /> },
+    { id: 'Users', label: 'Players', icon: <Users size={18} /> },
+    { id: 'Competitions', label: 'Matches', icon: <Trophy size={18} /> },
     { id: 'Hosts', label: 'Hosts', icon: <Shield size={18} /> },
-    { id: 'Content', label: 'Content', icon: <Gamepad2 size={18} /> },
-    { id: 'Notifications', label: 'Notifications', icon: <Bell size={18} /> },
+    { id: 'Content', label: 'Schedules', icon: <Gamepad2 size={18} /> },
+    { id: 'Notifications', label: 'Alerts', icon: <Bell size={18} /> },
   ]
 
   return (
@@ -391,8 +391,8 @@ export function App() {
         </div>
 
         <div className="workspace">
-          <span>WORKSPACE</span>
-          <b>Platform Admin</b>
+          <span>ADMIN</span>
+          <b>Dashboard</b>
         </div>
 
         <nav>
@@ -411,9 +411,9 @@ export function App() {
         <div className="sidebar-foot">
           <div className="secure-dot" />
           <span>
-            Production AWS EC2
+            Server: Connected
             <br />
-            <small>https://api.pagewoga.online</small>
+            <small>api.pagewoga.online</small>
           </span>
         </div>
       </aside>
@@ -422,13 +422,12 @@ export function App() {
         <header>
           <div className="header-left">
             {page !== 'Overview' && (
-              <button className="back-button" onClick={goBack} title="Back to previous screen">
+              <button className="back-button" onClick={goBack} title="Back">
                 ← Back
               </button>
             )}
             <div>
-              <span className="eyebrow">ADMIN CONSOLE / {page.toUpperCase()}</span>
-              <h1>{page}</h1>
+              <h1>{page === 'Users' ? 'Players' : page === 'Competitions' ? 'Matches' : page === 'Content' ? 'Schedules' : page === 'Notifications' ? 'Alerts' : page}</h1>
             </div>
           </div>
 
@@ -436,7 +435,7 @@ export function App() {
             <button
               className={`icon-button refresh-btn ${isRefreshing ? 'spinning' : ''}`}
               aria-label="Refresh Data"
-              title="Refresh Live Data"
+              title="Refresh"
               onClick={fetchDashboard}
               disabled={isRefreshing}
             >
@@ -446,17 +445,17 @@ export function App() {
               className="icon-button"
               aria-label="Notifications"
               onClick={() => navigateTo('Notifications')}
-              title="Push Broadcasts"
+              title="Alerts"
             >
               <Bell size={16} />
             </button>
             <div className="profile">
               <div className="avatar">{(session.name || session.username || 'A').slice(0, 1).toUpperCase()}</div>
               <span>
-                {session.name || session.username || 'Administrator'}
-                <small>Administrator</small>
+                {session.name || session.username || 'Admin'}
+                <small>Admin</small>
               </span>
-              <button onClick={signOut} aria-label="Log out" title="Sign out of Admin Console">
+              <button onClick={signOut} aria-label="Log out" title="Log out">
                 <LogOut size={16} />
               </button>
             </div>

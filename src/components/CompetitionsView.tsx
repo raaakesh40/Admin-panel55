@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import type { FormEvent } from 'react'
 import type { CompetitionItem } from '../types'
 import { api } from '../services/api'
-import { Search, Key, Users, Trophy, AlertCircle, CheckCircle2 } from 'lucide-react'
+import { Search, Key, Trophy, AlertCircle, CheckCircle2 } from 'lucide-react'
 
 function normalizeCompetition(data: unknown): CompetitionItem {
   if (!data || typeof data !== 'object') {
@@ -21,7 +21,7 @@ function normalizeCompetition(data: unknown): CompetitionItem {
       scheduleTime: 'Scheduled',
       roomId: '',
       roomPassword: '',
-      hostName: 'Platform Host',
+      hostName: 'Host',
     }
   }
 
@@ -41,7 +41,7 @@ function normalizeCompetition(data: unknown): CompetitionItem {
     scheduleTime: String(d.scheduleTime || d.schedule_time || d.scheduledAt || 'Scheduled'),
     roomId: String(d.roomId || d.room_id || ''),
     roomPassword: String(d.roomPassword || d.room_password || ''),
-    hostName: String(d.hostName || d.host_name || d.host || 'Platform Host'),
+    hostName: String(d.hostName || d.host_name || d.host || 'Host'),
   }
 }
 
@@ -49,10 +49,10 @@ function extractCompArray(data: unknown): CompetitionItem[] {
   if (!data) return []
   if (Array.isArray(data)) return data.map(normalizeCompetition)
   if (typeof data === 'object') {
-    const r = data as Record<string, unknown>
-    if (Array.isArray(r.competitions)) return r.competitions.map(normalizeCompetition)
-    if (Array.isArray(r.data)) return r.data.map(normalizeCompetition)
-    if (Array.isArray(r.matches)) return r.matches.map(normalizeCompetition)
+    const r一身 = data as Record<string, unknown>
+    if (Array.isArray(r一身.competitions)) return r一身.competitions.map(normalizeCompetition)
+    if (Array.isArray(r一身.data)) return r一身.data.map(normalizeCompetition)
+    if (Array.isArray(r一身.matches)) return r一身.matches.map(normalizeCompetition)
   }
   return []
 }
@@ -61,30 +61,45 @@ export function CompetitionsView() {
   const [identifier, setIdentifier] = useState('')
   const [loading, setLoading] = useState(false)
   const [searchResult, setSearchResult] = useState<CompetitionItem | null>(null)
-  const [rawResult, setRawResult] = useState<Record<string, unknown> | null>(null)
   const [errorMessage, setErrorMessage] = useState('')
   const [actionSuccess, setActionSuccess] = useState('')
 
-  // Filter state for competition categories
   const [filterType, setFilterType] = useState<'all' | 'omb' | 'tournament'>('all')
   const [filterStatus, setFilterStatus] = useState<'all' | 'upcoming' | 'live' | 'completed'>('all')
 
-  // Genuine database competitions list
   const [competitionsList, setCompetitionsList] = useState<CompetitionItem[]>([])
   const [listLoading, setListLoading] = useState(false)
 
   async function fetchCompetitionsList() {
     setListLoading(true)
     try {
-      let comps: CompetitionItem[] = []
+      const allComps: CompetitionItem[] = []
       try {
-        const data = await api<unknown>('/operations/competitions')
-        comps = extractCompArray(data)
+        const ombData = await api<unknown>('/competitions/omb/available')
+        const ombList述 = extractCompArray(ombData).map((c) => ({ ...c, type: 'omb' as const }))
+        allComps.push(...ombList述)
       } catch {
-        const fbData = await api<unknown>('/admin/competitions')
-        comps = extractCompArray(fbData)
+        // fallback
       }
-      setCompetitionsList(comps)
+
+      try {
+        const tourData = await api<unknown>('/competitions/tournament/available')
+        const tourList = extractCompArray(tourData).map((c) => ({ ...c, type: 'tournament' as const }))
+        allComps.push(...tourList)
+      } catch {
+        // fallback
+      }
+
+      if (allComps.length === 0) {
+        try {
+          const opsData = await api<unknown>('/operations/competitions')
+          allComps.push(...extractCompArray(opsData))
+        } catch {
+          // ignore
+        }
+      }
+
+      setCompetitionsList(allComps)
     } catch {
       setCompetitionsList([])
     } finally {
@@ -96,16 +111,21 @@ export function CompetitionsView() {
     let ignore = false
     async function load() {
       try {
-        let comps: CompetitionItem[] = []
+        const allComps: CompetitionItem[] = []
         try {
-          const data = await api<unknown>('/operations/competitions')
-          comps = extractCompArray(data)
+          const ombData = await api<unknown>('/competitions/omb/available')
+          allComps.push(...extractCompArray(ombData).map((c) => ({ ...c, type: 'omb' as const })))
         } catch {
-          const fbData = await api<unknown>('/admin/competitions')
-          comps = extractCompArray(fbData)
+          // ignore
+        }
+        try {
+          const tourData = await api<unknown>('/competitions/tournament/available')
+          allComps.push(...extractCompArray(tourData).map((c) => ({ ...c, type: 'tournament' as const })))
+        } catch {
+          // ignore
         }
         if (!ignore) {
-          setCompetitionsList(comps)
+          setCompetitionsList(allComps)
         }
       } catch {
         if (!ignore) {
@@ -130,7 +150,6 @@ export function CompetitionsView() {
     setErrorMessage('')
     setActionSuccess('')
     setSearchResult(null)
-    setRawResult(null)
     setLoading(true)
 
     try {
@@ -138,9 +157,7 @@ export function CompetitionsView() {
       const data = await api<Record<string, unknown>>(
         `/operations/competitions/search?identifier=${encodeURIComponent(clean)}`
       )
-      setRawResult(data)
 
-      // Normalize result if standard competition shape
       if (data && typeof data === 'object') {
         const item: CompetitionItem = {
           id: String(data.id || clean),
@@ -157,12 +174,12 @@ export function CompetitionsView() {
           scheduleTime: String(data.scheduleTime || data.scheduledAt || 'Scheduled'),
           roomId: String(data.roomId || ''),
           roomPassword: String(data.roomPassword || ''),
-          hostName: String(data.hostName || 'Platform Host'),
+          hostName: String(data.hostName || 'Host'),
         }
         setSearchResult(item)
       }
     } catch (e) {
-      setErrorMessage(e instanceof Error ? e.message : 'Competition record not found in database.')
+      setErrorMessage(e instanceof Error ? e.message : 'Match not found.')
     } finally {
       setLoading(false)
     }
@@ -179,16 +196,17 @@ export function CompetitionsView() {
       await api(`/admin/competitions/${activeRoomMatch.id}/room`, {
         method: 'POST',
         body: JSON.stringify({
-          roomId: roomInputId,
-          roomPassword: roomInputPass,
+          type: activeRoomMatch.type || 'omb',
+          roomId: roomInputId.trim(),
+          roomPassword: roomInputPass.trim(),
         }),
       })
 
-      setActionSuccess(`Room credentials published to database for match ${activeRoomMatch.code}`)
+      setActionSuccess(`Room updated for match ${activeRoomMatch.code}`)
       setActiveRoomMatch(null)
       await fetchCompetitionsList()
     } catch (err) {
-      setErrorMessage(err instanceof Error ? err.message : 'Failed to publish room credentials on server.')
+      setErrorMessage(err instanceof Error ? err.message : 'Failed to update room.')
     } finally {
       setRoomLoading(false)
     }
@@ -208,40 +226,39 @@ export function CompetitionsView() {
 
   return (
     <div className="competitions-container">
-      <div className="page-intro with-action">
+      <div className="view-header">
         <div>
-          <span className="eyebrow">MATCHES & TOURNAMENTS</span>
-          <h2>Competition Operations</h2>
-          <p>Search match records, publish room credentials (ID/Password), and track participant slots in real-time.</p>
+          <h2>Matches</h2>
+          <p>Search competitions and publish room details</p>
         </div>
       </div>
 
       <form className="search-form-card" onSubmit={handleSearch}>
         <div className="search-input-group">
-          <Search size={18} className="search-icon" />
+          <Search size={16} className="search-icon" />
           <input
             required
             type="text"
-            placeholder="Search by Match ID, Tournament Code (e.g. BGMI-SOLO-99), or record ID..."
+            placeholder="Search Match ID or Code..."
             value={identifier}
             onChange={(e) => setIdentifier(e.target.value)}
           />
         </div>
         <button className="primary" type="submit" disabled={loading}>
-          {loading ? 'Searching...' : 'Lookup Record'}
+          {loading ? 'Searching...' : 'Search'}
         </button>
       </form>
 
       {errorMessage && (
-        <div className="alert-card error">
-          <AlertCircle size={18} />
+        <div className="alert-box error">
+          <AlertCircle size={16} />
           <span>{errorMessage}</span>
         </div>
       )}
 
       {actionSuccess && (
-        <div className="alert-card success">
-          <CheckCircle2 size={18} />
+        <div className="alert-box success">
+          <CheckCircle2 size={16} />
           <span>{actionSuccess}</span>
         </div>
       )}
@@ -249,9 +266,9 @@ export function CompetitionsView() {
       {searchResult && (
         <div className="search-result-block">
           <div className="result-header">
-            <h3>Record Found: {searchResult.code}</h3>
+            <h3>Match: {searchResult.code}</h3>
             <button className="secondary small-btn" onClick={() => setSearchResult(null)}>
-              ✕ Close Detail
+              Close
             </button>
           </div>
 
@@ -269,30 +286,30 @@ export function CompetitionsView() {
 
             <div className="match-meta-grid">
               <div className="meta-box">
-                <span>Entry Fee</span>
-                <strong>{searchResult.entryFee} Play Coins</strong>
+                <span>Fee</span>
+                <strong>{searchResult.entryFee} Coins</strong>
               </div>
               <div className="meta-box">
-                <span>Prize Pool</span>
+                <span>Prize</span>
                 <strong className="text-green">₹{searchResult.prizePool.toLocaleString()}</strong>
               </div>
               <div className="meta-box">
-                <span>Slots Filled</span>
+                <span>Slots</span>
                 <strong>
                   {searchResult.joinedSlots} / {searchResult.maxSlots}
                 </strong>
               </div>
               <div className="meta-box">
-                <span>Schedule</span>
+                <span>Time</span>
                 <strong>{searchResult.scheduleTime}</strong>
               </div>
             </div>
 
             <div className="room-info-strip">
               <div className="room-details">
-                <Key size={16} color="#aa3bff" />
+                <Key size={14} color="#aa3bff" />
                 <span>
-                  Room ID: <b>{searchResult.roomId || 'Not set yet'}</b> | Password:{' '}
+                  Room: <b>{searchResult.roomId || 'Not set'}</b> | Pass:{' '}
                   <b>{searchResult.roomPassword || 'None'}</b>
                 </span>
               </div>
@@ -300,25 +317,15 @@ export function CompetitionsView() {
                 className="secondary small-btn"
                 onClick={() => openRoomModal(searchResult)}
               >
-                Update Room ID / Pass
+                Set Room
               </button>
             </div>
           </div>
-
-          {rawResult && (
-            <details className="raw-json-details">
-              <summary>View Complete Database Payload (JSON)</summary>
-              <pre className="record-json">{JSON.stringify(rawResult, null, 2)}</pre>
-            </details>
-          )}
         </div>
       )}
 
       <div className="section-divider">
-        <div>
-          <span className="eyebrow">ACTIVE COMPETITION FEED</span>
-          <h3>Live & Upcoming Matches</h3>
-        </div>
+        <h3>Live & Upcoming Matches</h3>
         <div className="filters-row">
           <select
             value={filterType}
@@ -327,7 +334,7 @@ export function CompetitionsView() {
           >
             <option value="all">All Types</option>
             <option value="tournament">Tournaments</option>
-            <option value="omb">OMB (1v1 Matches)</option>
+            <option value="omb">OMBs (1v1)</option>
           </select>
           <select
             value={filterStatus}
@@ -347,11 +354,11 @@ export function CompetitionsView() {
       {filteredMatches.length === 0 && !listLoading ? (
         <div className="state-card">
           <div className="state-icon">
-            <Trophy size={36} color="#ffa800" />
+            <Trophy size={32} color="#ffa800" />
           </div>
-          <h3>No Match Records in Database</h3>
+          <h3>No Matches Found</h3>
           <p className="state-desc">
-            No live or upcoming competitions are currently stored in your database. You can schedule and publish matches from the Match Creation tab.
+            No competitions active right now. Schedule new matches from Content tab.
           </p>
         </div>
       ) : (
@@ -363,7 +370,7 @@ export function CompetitionsView() {
                   <span className="badge-tag">{match.game}</span>
                   <h4>{match.title}</h4>
                   <small className="match-code">
-                    Code: <b>{match.code}</b> • Mode: {match.mode}
+                    {match.code} • {match.mode}
                   </small>
                 </div>
                 <span className={`status-pill ${match.status}`}>
@@ -394,7 +401,6 @@ export function CompetitionsView() {
 
               <div className="match-footer">
                 <div className="host-info">
-                  <Users size={14} />
                   <span>Host: {match.hostName}</span>
                 </div>
                 <button
@@ -414,17 +420,14 @@ export function CompetitionsView() {
         <div className="modal-overlay">
           <div className="modal-content">
             <div className="modal-header">
-              <h3>Publish Room Credentials</h3>
+              <h3>Room Details ({activeRoomMatch.code})</h3>
               <button className="close-btn" onClick={() => setActiveRoomMatch(null)}>
                 ✕
               </button>
             </div>
-            <p className="modal-desc">
-              Set custom Room ID and Password for match: <b>{activeRoomMatch.code}</b>. This will be automatically revealed to registered participants.
-            </p>
             <form onSubmit={handleSaveRoomCredentials} className="modal-form">
               <label>
-                Room ID / Custom Room Code
+                Room ID
                 <input
                   required
                   type="text"
@@ -438,7 +441,7 @@ export function CompetitionsView() {
                 Room Password
                 <input
                   type="text"
-                  placeholder="e.g. 1234 or leave empty"
+                  placeholder="e.g. 1234"
                   value={roomInputPass}
                   onChange={(e) => setRoomInputPass(e.target.value)}
                 />
@@ -453,7 +456,7 @@ export function CompetitionsView() {
                   Cancel
                 </button>
                 <button type="submit" className="primary" disabled={roomLoading}>
-                  {roomLoading ? 'Publishing...' : 'Publish to Players'}
+                  {roomLoading ? 'Saving...' : 'Save Room'}
                 </button>
               </div>
             </form>
