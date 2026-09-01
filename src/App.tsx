@@ -515,6 +515,9 @@ export function App() {
                 retry={fetchDashboard}
                 isRefreshing={isRefreshing}
                 onSignOut={signOut}
+                onNavigateToGames={() => navigateTo('Games')}
+                onNavigateToOmb={() => navigateTo('Ombs')}
+                onNavigateToTournaments={() => navigateTo('Tournaments')}
               />
             )}
             {page === 'Games' && (

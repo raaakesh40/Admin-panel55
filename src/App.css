@@ -2381,4 +2381,179 @@ button.success {
   border-color: rgba(139, 92, 246, 0.3) !important;
 }
 
+/* Catalog Game Card enhancements */
+.catalog-name-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.catalog-name-row h4 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-color);
+}
+
+.icon-edit-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+}
+
+.icon-edit-btn:hover {
+  background: var(--bg-hover);
+  color: var(--primary-color);
+}
+
+.status-toggle-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+  flex-wrap: wrap;
+}
+
+.status-quick-toggle-btn {
+  font-size: 11px;
+  padding: 2px 7px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  font-weight: 500;
+}
+
+.status-quick-toggle-btn.deactivate-btn {
+  background: rgba(239, 68, 68, 0.08);
+  border: 1px solid rgba(239, 68, 68, 0.25);
+  color: #ef4444;
+}
+
+.status-quick-toggle-btn.deactivate-btn:hover {
+  background: #ef4444;
+  color: #ffffff;
+}
+
+.status-quick-toggle-btn.activate-btn {
+  background: rgba(16, 185, 129, 0.08);
+  border: 1px solid rgba(16, 185, 129, 0.25);
+  color: #10b981;
+}
+
+.status-quick-toggle-btn.activate-btn:hover {
+  background: #10b981;
+  color: #ffffff;
+}
+
+.catalog-status-badge.inactive {
+  background: rgba(239, 68, 68, 0.1);
+  color: #ef4444;
+  border: 1px solid rgba(239, 68, 68, 0.25);
+}
+
+/* Clickable card in overview */
+.clickable-card {
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.clickable-card:hover {
+  border-color: var(--primary-color);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+
+.metric-card-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+}
+
+.chevron-indicator {
+  color: var(--text-muted);
+  transition: transform 0.15s ease;
+}
+
+.clickable-card:hover .chevron-indicator {
+  color: var(--primary-color);
+  transform: translateX(3px);
+}
+
+/* Schedule breakdown bar */
+.schedule-status-breakdown-bar {
+  display: flex;
+  gap: 12px;
+  margin: 16px 0 20px 0;
+  flex-wrap: wrap;
+}
+
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border-radius: 6px;
+  font-size: 13px;
+  background: var(--card-bg);
+  border: 1px solid var(--border-color);
+}
+
+.status-pill.published-pill {
+  border-color: rgba(16, 185, 129, 0.3);
+  color: #10b981;
+  background: rgba(16, 185, 129, 0.06);
+}
+
+.status-pill.draft-pill {
+  border-color: rgba(245, 158, 11, 0.3);
+  color: #f59e0b;
+  background: rgba(245, 158, 11, 0.06);
+}
+
+.status-pill.closed-pill {
+  border-color: rgba(107, 114, 128, 0.3);
+  color: #9ca3af;
+  background: rgba(107, 114, 128, 0.06);
+}
+
+/* Filter controls */
+.filter-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.filter-select {
+  background: var(--card-bg);
+  border: 1px solid var(--border-color);
+  color: var(--text-color);
+  font-size: 13px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  outline: none;
+}
+
+.filter-select:focus {
+  border-color: var(--primary-color);
+}
+
+.platform-metric-grid {
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+}
+
+.mini-metric-card {
+  padding: 14px 16px;
+}
+
+
 

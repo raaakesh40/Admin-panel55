@@ -12,6 +12,9 @@ import {
   Trophy,
   Search,
   Check,
+  Edit2,
+  Power,
+  Filter,
 } from 'lucide-react'
 
 interface GamesViewProps {
@@ -26,12 +29,21 @@ export function GamesView({ onNavigateToOmb, onNavigateToTournament }: GamesView
   const [errorMessage, setErrorMessage] = useState('')
   const [successMessage, setSuccessMessage] = useState('')
   const [searchQuery, setSearchQuery] = useState('')
+  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all')
 
   // Create Modal
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [newGameName, setNewGameName] = useState('')
   const [newGameLogoUrl, setNewGameLogoUrl] = useState('')
   const [creatingGame, setCreatingGame] = useState(false)
+
+  // Edit Modal
+  const [editingGame, setEditingGame] = useState<Game | null>(null)
+  const [editGameName, setEditGameName] = useState('')
+  const [editGameLogoUrl, setEditGameLogoUrl] = useState('')
+  const [editGameIsActive, setEditGameIsActive] = useState(true)
+  const [showEditModal, setShowEditModal] = useState(false)
+  const [updatingGame, setUpdatingGame] = useState(false)
 
   async function loadData() {
     setLoading(true)
@@ -137,9 +149,74 @@ export function GamesView({ onNavigateToOmb, onNavigateToTournament }: GamesView
     }
   }
 
-  const filteredGames = games.filter((g) =>
-    g.name.toLowerCase().includes(searchQuery.toLowerCase())
-  )
+  function openEditGame(g: Game) {
+    setEditingGame(g)
+    setEditGameName(g.name)
+    setEditGameLogoUrl(g.logoUrl || '')
+    setEditGameIsActive(g.isActive !== false)
+    setShowEditModal(true)
+  }
+
+  async function handleUpdateGame(e: FormEvent) {
+    e.preventDefault()
+    if (!editingGame) return
+
+    setUpdatingGame(true)
+    setErrorMessage('')
+    setSuccessMessage('')
+
+    const name = editGameName.trim()
+    if (!name || name.length > 128) {
+      setErrorMessage('Game name must be between 1 and 128 characters.')
+      setUpdatingGame(false)
+      return
+    }
+
+    const payload = {
+      name,
+      logoUrl: editGameLogoUrl.trim() || null,
+      isActive: editGameIsActive,
+    }
+
+    try {
+      await api(`/admin/competition/games/${editingGame.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify(payload),
+      })
+      setSuccessMessage(`Game "${name}" updated successfully.`)
+      setShowEditModal(false)
+      setEditingGame(null)
+      await loadData()
+    } catch (err) {
+      setErrorMessage(err instanceof Error ? err.message : 'Failed to update game')
+    } finally {
+      setUpdatingGame(false)
+    }
+  }
+
+  async function toggleGameActive(g: Game) {
+    const nextState = g.isActive === false
+    try {
+      await api(`/admin/competition/games/${g.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ isActive: nextState }),
+      })
+      setSuccessMessage(`Game "${g.name}" ${nextState ? 'activated' : 'deactivated'} successfully.`)
+      setGames((prev) =>
+        prev.map((item) => (item.id === g.id ? { ...item, isActive: nextState } : item))
+      )
+    } catch (err) {
+      setErrorMessage(err instanceof Error ? err.message : 'Failed to toggle game status')
+    }
+  }
+
+  const filteredGames = games.filter((g) => {
+    const matchesSearch = g.name.toLowerCase().includes(searchQuery.toLowerCase())
+    if (!matchesSearch) return false
+    if (statusFilter === 'active') return g.isActive !== false
+    if (statusFilter === 'inactive') return g.isActive === false
+    return true
+  })
 
   return (
     <div className="domain-view-container">
@@ -233,6 +310,21 @@ export function GamesView({ onNavigateToOmb, onNavigateToTournament }: GamesView
             </button>
           )}
         </div>
+
+        <div className="filter-group">
+          <Filter size={13} color="var(--text-muted)" />
+          <select
+            id="game-status-filter"
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value as 'all' | 'active' | 'inactive')}
+            className="filter-select"
+          >
+            <option value="all">All Status ({games.length})</option>
+            <option value="active">Active Only ({games.filter((g) => g.isActive !== false).length})</option>
+            <option value="inactive">Inactive Only ({games.filter((g) => g.isActive === false).length})</option>
+          </select>
+        </div>
+
         <span className="muted-count">Showing {filteredGames.length} of {games.length} catalog items</span>
       </div>
 
@@ -247,13 +339,13 @@ export function GamesView({ onNavigateToOmb, onNavigateToTournament }: GamesView
           <div className="state-icon">
             <Gamepad2 size={32} color="#3b82f6" />
           </div>
-          <h3>{searchQuery ? 'No Matching Games Found' : 'No Games in Catalog'}</h3>
+          <h3>{searchQuery || statusFilter !== 'all' ? 'No Matching Games Found' : 'No Games in Catalog'}</h3>
           <p className="state-desc">
-            {searchQuery
-              ? `No games match "${searchQuery}". Try clearing your search.`
+            {searchQuery || statusFilter !== 'all'
+              ? `No games match your filters. Try clearing search or status selection.`
               : 'The game catalog is empty. Click below to register your first game.'}
           </p>
-          {!searchQuery && (
+          {!searchQuery && statusFilter === 'all' && (
             <button
               className="primary small-btn"
               onClick={() => setShowCreateModal(true)}
@@ -267,6 +359,7 @@ export function GamesView({ onNavigateToOmb, onNavigateToTournament }: GamesView
           {filteredGames.map((g) => {
             const ombModes = modes.filter((m) => m.gameId === g.id && m.type === 'omb')
             const tournamentModes = modes.filter((m) => m.gameId === g.id && m.type === 'tournament')
+            const isActive = g.isActive !== false
 
             return (
               <article key={g.id} className="catalog-game-card">
@@ -287,11 +380,31 @@ export function GamesView({ onNavigateToOmb, onNavigateToTournament }: GamesView
                     </div>
                   )}
                   <div className="catalog-game-info">
-                    <h4>{g.name}</h4>
+                    <div className="catalog-name-row">
+                      <h4>{g.name}</h4>
+                      <button
+                        className="icon-edit-btn"
+                        onClick={() => openEditGame(g)}
+                        title="Edit Game"
+                        aria-label={`Edit game ${g.name}`}
+                      >
+                        <Edit2 size={13} />
+                      </button>
+                    </div>
                     <span className="catalog-game-uuid">ID: {g.id}</span>
-                    <span className="catalog-status-badge active">
-                      <Check size={10} /> Active Catalog
-                    </span>
+                    <div className="status-toggle-row">
+                      <span className={`catalog-status-badge ${isActive ? 'active' : 'inactive'}`}>
+                        {isActive ? <Check size={10} /> : <Power size={10} />}
+                        {isActive ? 'Active Catalog' : 'Deactivated'}
+                      </span>
+                      <button
+                        className={`status-quick-toggle-btn ${isActive ? 'deactivate-btn' : 'activate-btn'}`}
+                        onClick={() => toggleGameActive(g)}
+                        title={isActive ? 'Deactivate Game' : 'Activate Game'}
+                      >
+                        {isActive ? 'Deactivate' : 'Activate'}
+                      </button>
+                    </div>
                   </div>
                 </div>
 
@@ -383,6 +496,77 @@ export function GamesView({ onNavigateToOmb, onNavigateToTournament }: GamesView
                   disabled={creatingGame}
                 >
                   {creatingGame ? 'Creating...' : 'Create Game'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Edit Game */}
+      {showEditModal && editingGame && (
+        <div className="modal-overlay" onClick={() => setShowEditModal(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <div className="modal-title-wrap">
+                <Gamepad2 size={20} color="#3b82f6" />
+                <h3>Edit Game: {editingGame.name}</h3>
+              </div>
+              <button className="close-btn" onClick={() => setShowEditModal(false)}>
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleUpdateGame} className="modal-form">
+              <p className="form-info-text">
+                Updates game catalog item on <code>PATCH /api/admin/competition/games/{editingGame.id}</code>.
+              </p>
+
+              <label>
+                Game Name *
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. PUBG Mobile, Free Fire, Chess"
+                  value={editGameName}
+                  onChange={(e) => setEditGameName(e.target.value)}
+                  maxLength={128}
+                />
+              </label>
+
+              <label>
+                Logo Image URL (Optional)
+                <input
+                  type="url"
+                  placeholder="https://example.com/game-logo.png"
+                  value={editGameLogoUrl}
+                  onChange={(e) => setEditGameLogoUrl(e.target.value)}
+                />
+              </label>
+
+              <label className="checkbox-label">
+                <input
+                  type="checkbox"
+                  checked={editGameIsActive}
+                  onChange={(e) => setEditGameIsActive(e.target.checked)}
+                />
+                <span>Active in Catalog (allows new modes & schedules)</span>
+              </label>
+
+              <div className="modal-actions">
+                <button
+                  type="button"
+                  className="secondary small-btn"
+                  onClick={() => setShowEditModal(false)}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="primary small-btn"
+                  disabled={updatingGame}
+                >
+                  {updatingGame ? 'Saving...' : 'Save Changes'}
                 </button>
               </div>
             </form>
