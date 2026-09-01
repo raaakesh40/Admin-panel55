@@ -135,9 +135,16 @@ export function GamesView({ onNavigateToOmb, onNavigateToTournament }: GamesView
       return
     }
 
+    const trimmedLogo = newGameLogoUrl.trim()
+    if (trimmedLogo && !trimmedLogo.startsWith('http://') && !trimmedLogo.startsWith('https://')) {
+      setErrorMessage('Logo URL must be a valid URL starting with http:// or https://')
+      setCreatingGame(false)
+      return
+    }
+
     const payload = {
       name,
-      logoUrl: newGameLogoUrl.trim() || null,
+      logoUrl: trimmedLogo || null,
     }
 
     try {
@@ -192,9 +199,25 @@ export function GamesView({ onNavigateToOmb, onNavigateToTournament }: GamesView
       return
     }
 
+    const isDuplicate = games.some(
+      (g) => g.id !== editingGame.id && g.name.trim().toLowerCase() === name.toLowerCase()
+    )
+    if (isDuplicate) {
+      setErrorMessage('A game with this name already exists in the catalog.')
+      setUpdatingGame(false)
+      return
+    }
+
+    const trimmedLogo = editGameLogoUrl.trim()
+    if (trimmedLogo && !trimmedLogo.startsWith('http://') && !trimmedLogo.startsWith('https://')) {
+      setErrorMessage('Logo URL must be a valid URL starting with http:// or https://')
+      setUpdatingGame(false)
+      return
+    }
+
     const payload = {
       name,
-      logoUrl: editGameLogoUrl.trim() || null,
+      logoUrl: trimmedLogo || null,
       isActive: editGameIsActive,
     }
 

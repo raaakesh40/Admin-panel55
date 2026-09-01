@@ -308,6 +308,26 @@ export function OmbView({ initialGameId }: OmbViewProps) {
       return
     }
 
+    for (const p of modeFormPrizes) {
+      if (typeof p.position !== 'number' || isNaN(p.position) || p.position <= 0) {
+        setErrorMessage('Prize position must be an integer greater than 0.')
+        setCreatingMode(false)
+        return
+      }
+      if (typeof p.amount !== 'number' || isNaN(p.amount) || p.amount < 0) {
+        setErrorMessage('Prize amount must be an integer greater than or equal to 0.')
+        setCreatingMode(false)
+        return
+      }
+    }
+
+    const trimmedLogo = modeFormLogoUrl.trim()
+    if (trimmedLogo && !trimmedLogo.startsWith('http://') && !trimmedLogo.startsWith('https://')) {
+      setErrorMessage('Logo URL must be a valid URL starting with http:// or https://')
+      setCreatingMode(false)
+      return
+    }
+
     const payload = {
       gameId,
       name,
@@ -315,9 +335,9 @@ export function OmbView({ initialGameId }: OmbViewProps) {
       entryFee: feeNum,
       maxParticipants: maxPartNum,
       teamSize: teamSizeNum,
-      prizes: modeFormPrizes.map((p) => ({ position: p.position, amount: Math.round(p.amount) })),
+      prizes: modeFormPrizes.map((p) => ({ position: Math.round(p.position), amount: Math.round(p.amount) })),
       tournamentMetric: null,
-      logoUrl: modeFormLogoUrl.trim() || null,
+      logoUrl: trimmedLogo || null,
     }
 
     try {
@@ -407,15 +427,41 @@ export function OmbView({ initialGameId }: OmbViewProps) {
       return
     }
 
+    if (!Array.isArray(editModePrizes) || editModePrizes.length === 0) {
+      setErrorMessage('At least one prize tier is required.')
+      setUpdatingMode(false)
+      return
+    }
+
+    for (const p of editModePrizes) {
+      if (typeof p.position !== 'number' || isNaN(p.position) || p.position <= 0) {
+        setErrorMessage('Prize position must be an integer greater than 0.')
+        setUpdatingMode(false)
+        return
+      }
+      if (typeof p.amount !== 'number' || isNaN(p.amount) || p.amount < 0) {
+        setErrorMessage('Prize amount must be an integer greater than or equal to 0.')
+        setUpdatingMode(false)
+        return
+      }
+    }
+
+    const trimmedLogo = editModeLogoUrl.trim()
+    if (trimmedLogo && !trimmedLogo.startsWith('http://') && !trimmedLogo.startsWith('https://')) {
+      setErrorMessage('Logo URL must be a valid URL starting with http:// or https://')
+      setUpdatingMode(false)
+      return
+    }
+
     const payload = {
       name,
       type: 'omb' as const,
       entryFee: feeNum,
       maxParticipants: maxPartNum,
       teamSize: teamSizeNum,
-      prizes: editModePrizes.map((p) => ({ position: p.position, amount: Math.round(p.amount) })),
+      prizes: editModePrizes.map((p) => ({ position: Math.round(p.position), amount: Math.round(p.amount) })),
       tournamentMetric: null,
-      logoUrl: editModeLogoUrl.trim() || null,
+      logoUrl: trimmedLogo || null,
       isActive: editModeIsActive,
     }
 
@@ -475,6 +521,13 @@ export function OmbView({ initialGameId }: OmbViewProps) {
       return
     }
 
+    const parsedDate = new Date(scheduleFormStartsAt)
+    if (isNaN(parsedDate.getTime())) {
+      setErrorMessage('Start Time must be a valid date.')
+      setCreatingSchedule(false)
+      return
+    }
+
     const roomReveal = Math.round(Number(scheduleFormRoomRevealMinutes))
     if (isNaN(roomReveal) || roomReveal < 0) {
       setErrorMessage('Room Reveal Minutes Before Start must be an integer >= 0.')
@@ -496,16 +549,23 @@ export function OmbView({ initialGameId }: OmbViewProps) {
       return
     }
 
+    const trimmedVideo = scheduleFormGuideVideoUrl.trim()
+    if (trimmedVideo && !trimmedVideo.startsWith('http://') && !trimmedVideo.startsWith('https://')) {
+      setErrorMessage('Guide Video URL must be a valid URL starting with http:// or https://')
+      setCreatingSchedule(false)
+      return
+    }
+
     const payload = {
       modeId: scheduleFormModeId,
       status: scheduleFormStatus,
-      startsAt: new Date(scheduleFormStartsAt).toISOString(),
+      startsAt: parsedDate.toISOString(),
       entryClosesAt: null,
       durationMinutes: null,
       roomRevealMinutesBeforeStart: roomReveal,
       resultDeadlineMinutes: resultDeadline,
       managerAlertAfterMinutes: managerAlert,
-      guideVideoUrl: scheduleFormGuideVideoUrl.trim() || null,
+      guideVideoUrl: trimmedVideo || null,
       notes: scheduleFormNotes.trim() || null,
     }
 

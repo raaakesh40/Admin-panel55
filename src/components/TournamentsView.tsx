@@ -317,6 +317,33 @@ export function TournamentsView({ initialGameId }: TournamentsViewProps) {
       return
     }
 
+    for (const p of modeFormPrizes) {
+      if (typeof p.position !== 'number' || isNaN(p.position) || p.position <= 0) {
+        setErrorMessage('Prize position must be an integer greater than 0.')
+        setCreatingMode(false)
+        return
+      }
+      if (typeof p.amount !== 'number' || isNaN(p.amount) || p.amount < 0) {
+        setErrorMessage('Prize amount must be an integer greater than or equal to 0.')
+        setCreatingMode(false)
+        return
+      }
+    }
+
+    const trimmedLogo = modeFormLogoUrl.trim()
+    if (trimmedLogo && !trimmedLogo.startsWith('http://') && !trimmedLogo.startsWith('https://')) {
+      setErrorMessage('Logo URL must be a valid URL starting with http:// or https://')
+      setCreatingMode(false)
+      return
+    }
+
+    const trimmedMetric = modeFormTournamentMetric.trim()
+    if (trimmedMetric.length > 128) {
+      setErrorMessage('Tournament Metric must be 128 characters or fewer.')
+      setCreatingMode(false)
+      return
+    }
+
     const payload = {
       gameId,
       name,
@@ -324,9 +351,9 @@ export function TournamentsView({ initialGameId }: TournamentsViewProps) {
       entryFee: feeNum,
       maxParticipants: maxPartNum,
       teamSize: teamSizeNum,
-      prizes: modeFormPrizes.map((p) => ({ position: p.position, amount: Math.round(p.amount) })),
-      tournamentMetric: modeFormTournamentMetric.trim() || 'Score',
-      logoUrl: modeFormLogoUrl.trim() || null,
+      prizes: modeFormPrizes.map((p) => ({ position: Math.round(p.position), amount: Math.round(p.amount) })),
+      tournamentMetric: trimmedMetric || null,
+      logoUrl: trimmedLogo || null,
     }
 
     try {
@@ -420,15 +447,48 @@ export function TournamentsView({ initialGameId }: TournamentsViewProps) {
       return
     }
 
+    if (!Array.isArray(editModePrizes) || editModePrizes.length === 0) {
+      setErrorMessage('At least one prize tier is required.')
+      setUpdatingMode(false)
+      return
+    }
+
+    for (const p of editModePrizes) {
+      if (typeof p.position !== 'number' || isNaN(p.position) || p.position <= 0) {
+        setErrorMessage('Prize position must be an integer greater than 0.')
+        setUpdatingMode(false)
+        return
+      }
+      if (typeof p.amount !== 'number' || isNaN(p.amount) || p.amount < 0) {
+        setErrorMessage('Prize amount must be an integer greater than or equal to 0.')
+        setUpdatingMode(false)
+        return
+      }
+    }
+
+    const trimmedLogo = editModeLogoUrl.trim()
+    if (trimmedLogo && !trimmedLogo.startsWith('http://') && !trimmedLogo.startsWith('https://')) {
+      setErrorMessage('Logo URL must be a valid URL starting with http:// or https://')
+      setUpdatingMode(false)
+      return
+    }
+
+    const trimmedMetric = editModeTournamentMetric.trim()
+    if (trimmedMetric.length > 128) {
+      setErrorMessage('Tournament Metric must be 128 characters or fewer.')
+      setUpdatingMode(false)
+      return
+    }
+
     const payload = {
       name,
       type: 'tournament' as const,
       entryFee: feeNum,
       maxParticipants: maxPartNum,
       teamSize: teamSizeNum,
-      prizes: editModePrizes.map((p) => ({ position: p.position, amount: Math.round(p.amount) })),
-      tournamentMetric: editModeTournamentMetric.trim() || 'Score',
-      logoUrl: editModeLogoUrl.trim() || null,
+      prizes: editModePrizes.map((p) => ({ position: Math.round(p.position), amount: Math.round(p.amount) })),
+      tournamentMetric: trimmedMetric || null,
+      logoUrl: trimmedLogo || null,
       isActive: editModeIsActive,
     }
 
@@ -488,6 +548,13 @@ export function TournamentsView({ initialGameId }: TournamentsViewProps) {
       return
     }
 
+    const parsedDate = new Date(scheduleFormEntryClosesAt)
+    if (isNaN(parsedDate.getTime())) {
+      setErrorMessage('Entry Close Time must be a valid date.')
+      setCreatingSchedule(false)
+      return
+    }
+
     const durNum = Math.round(Number(scheduleFormDurationMinutes))
     if (isNaN(durNum) || durNum <= 0) {
       setErrorMessage('Tournament duration in minutes must be an integer > 0.')
@@ -509,16 +576,23 @@ export function TournamentsView({ initialGameId }: TournamentsViewProps) {
       return
     }
 
+    const trimmedVideo = scheduleFormGuideVideoUrl.trim()
+    if (trimmedVideo && !trimmedVideo.startsWith('http://') && !trimmedVideo.startsWith('https://')) {
+      setErrorMessage('Guide Video URL must be a valid URL starting with http:// or https://')
+      setCreatingSchedule(false)
+      return
+    }
+
     const payload = {
       modeId: scheduleFormModeId,
       status: scheduleFormStatus,
       startsAt: null,
-      entryClosesAt: new Date(scheduleFormEntryClosesAt).toISOString(),
+      entryClosesAt: parsedDate.toISOString(),
       durationMinutes: durNum,
       roomRevealMinutesBeforeStart: null,
       resultDeadlineMinutes: resultDeadline,
       managerAlertAfterMinutes: managerAlert,
-      guideVideoUrl: scheduleFormGuideVideoUrl.trim() || null,
+      guideVideoUrl: trimmedVideo || null,
       notes: scheduleFormNotes.trim() || null,
     }
 
