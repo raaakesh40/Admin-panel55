@@ -1948,3 +1948,437 @@ button.success {
   color: #10b981;
 }
 
+/* ======================================================== */
+/* DOMAIN SEPARATION STYLING (OMB vs TOURNAMENT vs CATALOG) */
+/* ======================================================== */
+.domain-view-container {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: 100%;
+}
+
+.content-view-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: 100%;
+}
+
+.domain-segmented-control {
+  display: flex;
+  background: var(--surface);
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  padding: 4px;
+  gap: 4px;
+  max-width: 600px;
+}
+
+.segment-btn {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border-radius: 8px;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.segment-btn:hover {
+  color: var(--text-main);
+  background: var(--surface-muted);
+}
+
+.segment-btn.games-active {
+  background: rgba(59, 130, 246, 0.15);
+  color: #3b82f6;
+  border: 1px solid rgba(59, 130, 246, 0.3);
+}
+
+.segment-btn.omb-active {
+  background: rgba(139, 92, 246, 0.15);
+  color: #8b5cf6;
+  border: 1px solid rgba(139, 92, 246, 0.3);
+}
+
+.segment-btn.tournament-active {
+  background: rgba(245, 158, 11, 0.15);
+  color: #f59e0b;
+  border: 1px solid rgba(245, 158, 11, 0.3);
+}
+
+/* Domain Badges in Sidebar Navigation */
+.nav-domain-badge {
+  margin-left: auto;
+  font-size: 9px;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 4px;
+  letter-spacing: 0.5px;
+}
+
+.nav-omb-badge {
+  background: rgba(139, 92, 246, 0.2);
+  color: #a78bfa;
+  border: 1px solid rgba(139, 92, 246, 0.3);
+}
+
+.nav-tourn-badge {
+  background: rgba(245, 158, 11, 0.2);
+  color: #fbbf24;
+  border: 1px solid rgba(245, 158, 11, 0.3);
+}
+
+/* Domain Header & Badges */
+.domain-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  margin-bottom: 6px;
+}
+
+.omb-badge {
+  background: rgba(139, 92, 246, 0.15);
+  color: #8b5cf6;
+  border: 1px solid rgba(139, 92, 246, 0.3);
+}
+
+.tournament-badge {
+  background: rgba(245, 158, 11, 0.15);
+  color: #f59e0b;
+  border: 1px solid rgba(245, 158, 11, 0.3);
+}
+
+.omb-primary-btn {
+  background: #8b5cf6 !important;
+  color: #ffffff !important;
+  border-color: #7c3aed !important;
+}
+
+.omb-primary-btn:hover {
+  background: #7c3aed !important;
+}
+
+.tournament-primary-btn {
+  background: #f59e0b !important;
+  color: #111827 !important;
+  border-color: #d97706 !important;
+  font-weight: 700 !important;
+}
+
+.tournament-primary-btn:hover {
+  background: #d97706 !important;
+  color: #ffffff !important;
+}
+
+/* Drilldown Path Bar */
+.drilldown-nav-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: var(--surface);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 8px 14px;
+}
+
+.drilldown-path {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.drilldown-step {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 6px;
+}
+
+.drilldown-step:hover {
+  background: var(--surface-muted);
+  color: var(--text-main);
+}
+
+.drilldown-step.active {
+  color: var(--text-main);
+  font-weight: 700;
+  background: var(--surface-muted);
+}
+
+.drilldown-sep {
+  color: var(--text-muted);
+  opacity: 0.5;
+}
+
+.clear-filter-btn {
+  background: transparent;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  padding: 3px 8px;
+  font-size: 11px;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.clear-filter-btn:hover {
+  color: var(--text-main);
+  background: var(--surface-muted);
+}
+
+/* Catalog Stats Bar */
+.catalog-stats-bar {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+}
+
+.catalog-stat-item {
+  background: var(--surface);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 12px 16px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.catalog-stat-item strong {
+  display: block;
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text-main);
+}
+
+.catalog-stat-item span {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+/* Catalog Grid & Cards */
+.catalog-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 16px;
+}
+
+.catalog-game-card {
+  background: var(--surface);
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.catalog-card-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.catalog-game-logo {
+  width: 48px;
+  height: 48px;
+  border-radius: 10px;
+  object-fit: cover;
+  border: 1px solid var(--border-color);
+}
+
+.catalog-logo-placeholder {
+  width: 48px;
+  height: 48px;
+  border-radius: 10px;
+  background: rgba(59, 130, 246, 0.1);
+  color: #3b82f6;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(59, 130, 246, 0.2);
+}
+
+.catalog-game-info h4 {
+  margin: 0 0 2px;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.catalog-game-uuid {
+  display: block;
+  font-size: 10px;
+  font-family: monospace;
+  color: var(--text-muted);
+  margin-bottom: 4px;
+}
+
+.catalog-status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: rgba(16, 185, 129, 0.1);
+  color: #10b981;
+}
+
+.catalog-domain-counts {
+  display: flex;
+  gap: 8px;
+  background: var(--surface-muted);
+  padding: 8px 10px;
+  border-radius: 6px;
+}
+
+.domain-count-pill {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.domain-count-pill.omb-pill {
+  color: #8b5cf6;
+}
+
+.domain-count-pill.tournament-pill {
+  color: #f59e0b;
+}
+
+.catalog-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: auto;
+  padding-top: 8px;
+  border-top: 1px solid var(--border-color);
+}
+
+.domain-nav-btn {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.domain-nav-btn.omb-nav-btn {
+  background: rgba(139, 92, 246, 0.1);
+  border: 1px solid rgba(139, 92, 246, 0.3);
+  color: #8b5cf6;
+}
+
+.domain-nav-btn.omb-nav-btn:hover {
+  background: #8b5cf6;
+  color: #ffffff;
+}
+
+.domain-nav-btn.tournament-nav-btn {
+  background: rgba(245, 158, 11, 0.1);
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  color: #f59e0b;
+}
+
+.domain-nav-btn.tournament-nav-btn:hover {
+  background: #f59e0b;
+  color: #111827;
+}
+
+/* Domain specific mode/schedule cards */
+.omb-mode-card {
+  border-top: 3px solid #8b5cf6 !important;
+}
+
+.tournament-mode-card {
+  border-top: 3px solid #f59e0b !important;
+}
+
+.omb-schedule-card {
+  border-left: 3px solid #8b5cf6 !important;
+}
+
+.tournament-schedule-card {
+  border-left: 3px solid #f59e0b !important;
+}
+
+.tournament-metric-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(245, 158, 11, 0.1);
+  border: 1px solid rgba(245, 158, 11, 0.25);
+  border-radius: 4px;
+  padding: 3px 8px;
+  font-size: 11px;
+  color: #f59e0b;
+}
+
+.tournament-prize-chip {
+  background: rgba(245, 158, 11, 0.12) !important;
+  color: #f59e0b !important;
+  border-color: rgba(245, 158, 11, 0.3) !important;
+}
+
+.omb-prize-chip {
+  background: rgba(139, 92, 246, 0.12) !important;
+  color: #8b5cf6 !important;
+  border-color: rgba(139, 92, 246, 0.3) !important;
+}
+
+.tournament-pos-chip {
+  background: #f59e0b !important;
+  color: #111827 !important;
+  font-weight: 700;
+}
+
+.omb-focus-banner {
+  border-left: 3px solid #8b5cf6;
+}
+
+.tournament-focus-banner {
+  border-left: 3px solid #f59e0b;
+}
+
+.tournament-logo-placeholder {
+  background: rgba(245, 158, 11, 0.1) !important;
+  color: #f59e0b !important;
+  border-color: rgba(245, 158, 11, 0.3) !important;
+}
+
+.omb-logo-placeholder {
+  background: rgba(139, 92, 246, 0.1) !important;
+  color: #8b5cf6 !important;
+  border-color: rgba(139, 92, 246, 0.3) !important;
+}
+
+

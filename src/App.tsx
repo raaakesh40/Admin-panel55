@@ -1,6 +1,18 @@
 import { useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
-import { Eye, EyeOff, LayoutDashboard, Users, Trophy, Shield, Gamepad2, Bell, RefreshCw, LogOut } from 'lucide-react'
+import {
+  Eye,
+  EyeOff,
+  LayoutDashboard,
+  Users,
+  Trophy,
+  Shield,
+  Gamepad2,
+  Bell,
+  RefreshCw,
+  LogOut,
+  Swords,
+} from 'lucide-react'
 import type { DashboardData, SessionUser } from './types'
 import { api } from './services/api'
 import { OverviewView } from './components/OverviewView'
@@ -8,6 +20,9 @@ import { UsersView } from './components/UsersView'
 import { CompetitionsView } from './components/CompetitionsView'
 import { HostsView } from './components/HostsView'
 import { ContentView } from './components/ContentView'
+import { GamesView } from './components/GamesView'
+import { OmbView } from './components/OmbView'
+import { TournamentsView } from './components/TournamentsView'
 import { NotificationsView } from './components/NotificationsView'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import './App.css'
@@ -36,14 +51,20 @@ export function App() {
   const [loginError, setLoginError] = useState('')
   const [loginLoading, setLoginLoading] = useState(false)
 
-  const [page, setPage] = useState<'Overview' | 'Users' | 'Competitions' | 'Hosts' | 'Content' | 'Notifications'>('Overview')
+  const [page, setPage] = useState<
+    'Overview' | 'Games' | 'Ombs' | 'Tournaments' | 'Competitions' | 'Users' | 'Hosts' | 'Content' | 'Notifications'
+  >('Overview')
   const [history, setHistory] = useState<string[]>(['Overview'])
+  const [selectedGameFilter, setSelectedGameFilter] = useState<string | undefined>(undefined)
   const [dashboard, setDashboard] = useState<DashboardData | null>(null)
   const [error, setError] = useState('')
   const [isRefreshing, setIsRefreshing] = useState(false)
 
-  function navigateTo(newPage: typeof page) {
-    if (newPage === page) return
+  function navigateTo(newPage: typeof page, gameId?: string) {
+    if (gameId !== undefined) {
+      setSelectedGameFilter(gameId)
+    }
+    if (newPage === page && gameId === undefined) return
     setHistory((prev) => [...prev, newPage])
     setPage(newPage)
   }
@@ -371,12 +392,14 @@ export function App() {
     )
   }
 
-  const navItems: { id: typeof page; label: string; icon: React.ReactNode }[] = [
+  const navItems: { id: typeof page; label: string; icon: React.ReactNode; badge?: string }[] = [
     { id: 'Overview', label: 'Overview', icon: <LayoutDashboard size={18} /> },
+    { id: 'Games', label: 'Game Catalog', icon: <Gamepad2 size={18} /> },
+    { id: 'Ombs', label: 'OMB (1v1)', icon: <Swords size={18} />, badge: 'OMB' },
+    { id: 'Tournaments', label: 'Tournaments', icon: <Trophy size={18} />, badge: 'TOURN' },
+    { id: 'Competitions', label: 'Match Rooms', icon: <Shield size={18} /> },
     { id: 'Users', label: 'Players', icon: <Users size={18} /> },
-    { id: 'Competitions', label: 'Matches', icon: <Trophy size={18} /> },
     { id: 'Hosts', label: 'Hosts', icon: <Shield size={18} /> },
-    { id: 'Content', label: 'Schedules', icon: <Gamepad2 size={18} /> },
     { id: 'Notifications', label: 'Alerts', icon: <Bell size={18} /> },
   ]
 
@@ -404,6 +427,11 @@ export function App() {
             >
               <span>{item.icon}</span>
               {item.label}
+              {item.badge && (
+                <span className={`nav-domain-badge ${item.id === 'Ombs' ? 'nav-omb-badge' : 'nav-tourn-badge'}`}>
+                  {item.badge}
+                </span>
+              )}
             </button>
           ))}
         </nav>
@@ -427,7 +455,23 @@ export function App() {
               </button>
             )}
             <div>
-              <h1>{page === 'Users' ? 'Players' : page === 'Competitions' ? 'Matches' : page === 'Content' ? 'Schedules' : page === 'Notifications' ? 'Alerts' : page}</h1>
+              <h1>
+                {page === 'Games'
+                  ? 'Game Catalog'
+                  : page === 'Ombs'
+                  ? 'OMB Match Management'
+                  : page === 'Tournaments'
+                  ? 'Tournament Championships'
+                  : page === 'Users'
+                  ? 'Players'
+                  : page === 'Competitions'
+                  ? 'Match Rooms'
+                  : page === 'Content'
+                  ? 'Competition Content'
+                  : page === 'Notifications'
+                  ? 'Alerts'
+                  : page}
+              </h1>
             </div>
           </div>
 
@@ -473,8 +517,18 @@ export function App() {
                 onSignOut={signOut}
               />
             )}
-            {page === 'Users' && <UsersView />}
+            {page === 'Games' && (
+              <GamesView
+                onNavigateToOmb={(gameId) => navigateTo('Ombs', gameId)}
+                onNavigateToTournament={(gameId) => navigateTo('Tournaments', gameId)}
+              />
+            )}
+            {page === 'Ombs' && <OmbView initialGameId={selectedGameFilter} />}
+            {page === 'Tournaments' && (
+              <TournamentsView initialGameId={selectedGameFilter} />
+            )}
             {page === 'Competitions' && <CompetitionsView />}
+            {page === 'Users' && <UsersView />}
             {page === 'Hosts' && <HostsView />}
             {page === 'Content' && <ContentView />}
             {page === 'Notifications' && <NotificationsView />}
