@@ -1578,3 +1578,373 @@ button.success {
     padding: 16px;
   }
 }
+
+/* ==========================================================================
+   MODES & ADVANCED CONTENT STYLES
+   ========================================================================== */
+.modal-large {
+  max-width: 620px;
+}
+
+.segmented-control {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  background: var(--surface-muted);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 3px;
+  gap: 4px;
+}
+
+.segment-btn {
+  padding: 8px 12px;
+  border-radius: 6px;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.segment-btn.active {
+  background: var(--surface);
+  color: var(--primary);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.15);
+}
+
+.mode-type-pill {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.mode-type-pill.type-omb {
+  background: rgba(139, 92, 246, 0.15);
+  color: #8b5cf6;
+  border: 1px solid rgba(139, 92, 246, 0.3);
+}
+
+.mode-type-pill.type-tournament {
+  background: rgba(245, 158, 11, 0.15);
+  color: #f59e0b;
+  border: 1px solid rgba(245, 158, 11, 0.3);
+}
+
+.modes-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 16px;
+}
+
+.mode-config-card {
+  background: var(--surface);
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  transition: transform 0.15s ease, border-color 0.15s ease;
+}
+
+.mode-config-card:hover {
+  border-color: rgba(139, 92, 246, 0.4);
+}
+
+.mode-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.mode-badge-wrap {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.edit-mode-btn {
+  padding: 4px 6px;
+  background: transparent;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.edit-mode-btn:hover {
+  color: var(--primary);
+  border-color: var(--primary);
+}
+
+.mode-title-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.mode-logo-thumb {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  object-fit: cover;
+  background: var(--surface-muted);
+  border: 1px solid var(--border-color);
+}
+
+.mode-logo-placeholder {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  background: var(--surface-muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  border: 1px solid var(--border-color);
+}
+
+.mode-name {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.mode-game-tag {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.mode-specs-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+  background: var(--surface-muted);
+  border-radius: 6px;
+  padding: 8px 10px;
+}
+
+.spec-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.spec-lbl {
+  font-size: 9px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.spec-val {
+  font-size: 12px;
+}
+
+.highlight-gold {
+  color: #f59e0b;
+}
+
+.highlight-green {
+  color: #10b981;
+}
+
+.mode-metric-badge {
+  background: rgba(59, 130, 246, 0.1);
+  border: 1px solid rgba(59, 130, 246, 0.2);
+  border-radius: 6px;
+  padding: 4px 8px;
+  font-size: 11px;
+  color: #60a5fa;
+}
+
+.mode-prizes-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.prizes-lbl {
+  font-size: 10px;
+  color: var(--text-muted);
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.prizes-tags-wrap {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.prize-chip {
+  background: var(--surface-muted);
+  border: 1px solid var(--border-color);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--text-main);
+}
+
+.mode-card-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+  margin-top: auto;
+  padding-top: 8px;
+  border-top: 1px solid var(--border-color);
+}
+
+.game-modes-count {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--primary);
+  margin-top: 2px;
+}
+
+.mode-context-banner {
+  background: var(--surface);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 10px 14px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.mode-context-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  flex-wrap: wrap;
+}
+
+.context-label {
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.context-sep {
+  color: var(--text-muted);
+}
+
+.selected-mode-info-card {
+  background: rgba(139, 92, 246, 0.1);
+  border: 1px solid rgba(139, 92, 246, 0.25);
+  border-radius: 8px;
+  padding: 10px 12px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 12px;
+}
+
+.schedule-timing-box {
+  background: var(--surface-muted);
+  border-radius: 6px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.detail-line {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+}
+
+.detail-line-muted {
+  font-size: 10px;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+.schedule-notes-text {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin: 0;
+  background: var(--surface-muted);
+  padding: 6px 8px;
+  border-radius: 4px;
+}
+
+.guide-video-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--primary);
+  text-decoration: none;
+}
+
+.guide-video-link:hover {
+  text-decoration: underline;
+}
+
+.schedule-badge-wrap {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.schedule-id-chip {
+  font-size: 10px;
+  font-family: monospace;
+  color: var(--text-muted);
+}
+
+.schedule-mode-context h4 {
+  margin: 0 0 2px;
+  font-size: 14px;
+}
+
+.sched-game-name {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.close-alert-btn {
+  margin-left: auto;
+  background: transparent;
+  border: none;
+  color: inherit;
+  cursor: pointer;
+  font-size: 12px;
+  padding: 0 4px;
+}
+
+.join-result-box {
+  margin-top: 14px;
+  background: var(--surface-muted);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 12px;
+}
+
+.join-result-box h4 {
+  margin: 0 0 8px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.join-result-box pre {
+  margin: 0;
+  font-size: 11px;
+  font-family: monospace;
+  white-space: pre-wrap;
+  word-break: break-all;
+  color: #10b981;
+}
+

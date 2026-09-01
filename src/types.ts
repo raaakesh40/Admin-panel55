@@ -93,15 +93,9 @@ export type Game = {
   id: string
   name: string
   logoUrl?: string | null
+  isActive?: boolean
   createdAt?: string
-}
-
-export type GameMode = {
-  id: string
-  gameId: string
-  name: string
-  logoUrl?: string | null
-  createdAt?: string
+  updatedAt?: string
 }
 
 export type PrizeTier = {
@@ -109,28 +103,39 @@ export type PrizeTier = {
   amount: number
 }
 
-export type CompetitionSchedule = {
+export type GameMode = {
   id: string
-  modeId: string
+  gameId: string
+  name: string
+  logoUrl?: string | null
   type: 'omb' | 'tournament'
-  status: 'draft' | 'published' | 'closed'
   entryFee: number
   maxParticipants: number
   teamSize: number
+  prizes: PrizeTier[]
+  tournamentMetric?: string | null
+  isActive?: boolean
+  createdAt?: string
+  updatedAt?: string
+}
+
+export type CompetitionSchedule = {
+  id: string
+  modeId: string
+  status: 'draft' | 'published' | 'closed'
   startsAt?: string | null
   entryClosesAt?: string | null
   durationMinutes?: number | null
   roomRevealMinutesBeforeStart?: number | null
   resultDeadlineMinutes: number
   managerAlertAfterMinutes: number
-  tournamentMetric?: string | null
-  prizes: PrizeTier[]
   guideVideoUrl?: string | null
   notes?: string | null
   createdAt?: string
-  // Display helpers
-  gameName?: string
-  modeName?: string
+  updatedAt?: string
+  // Display helpers (populated via mode lookup in UI)
+  mode?: GameMode
+  game?: Game
 }
 
 export type CompetitionItem = {
