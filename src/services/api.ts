@@ -87,17 +87,26 @@ export function getAuthHeaders(): Record<string, string> {
 
 export async function api<T>(path: string, options?: RequestInit): Promise<T> {
   const cleanPath = path.startsWith('/') ? path : `/${path}`
+  
+  // Normalize path so /api is not duplicated
+  let routeSubPath = cleanPath
+  if (cleanPath.startsWith('/api/')) {
+    routeSubPath = cleanPath.slice(4) // e.g. /admin/competition/games
+  } else if (cleanPath === '/api') {
+    routeSubPath = ''
+  }
+
   let fullUrl: string
   if (cleanPath.startsWith('http://') || cleanPath.startsWith('https://')) {
     fullUrl = cleanPath
   } else if (API_BASE === '/api' || API_BASE === '') {
-    fullUrl = `/api${cleanPath}`
+    fullUrl = `/api${routeSubPath}`
   } else if (API_BASE.endsWith('/api')) {
-    fullUrl = `${API_BASE}${cleanPath}`
+    fullUrl = `${API_BASE}${routeSubPath}`
   } else if (API_BASE.startsWith('http')) {
-    fullUrl = `${API_BASE}/api${cleanPath}`
+    fullUrl = `${API_BASE}/api${routeSubPath}`
   } else {
-    fullUrl = `${API_BASE}${cleanPath}`
+    fullUrl = `${API_BASE}/api${routeSubPath}`
   }
 
   const authHeaders = getAuthHeaders()
@@ -138,7 +147,7 @@ export async function api<T>(path: string, options?: RequestInit): Promise<T> {
     // If direct cross-origin fetch fails due to CORS or network, fallback through local /api proxy
     if (!fullUrl.startsWith('/api')) {
       try {
-        response = await fetch(`/api${cleanPath}`, {
+        response = await fetch(`/api${routeSubPath}`, {
           ...options,
           credentials: 'include',
           headers: requestHeaders,

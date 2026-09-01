@@ -74,19 +74,63 @@ export type UserResult = {
 export type Host = {
   id: string
   name: string
-  username: string
+  username?: string
   mobileNumber?: string
   upiId?: string
-  assignedGame: string
-  role?: 'omb' | 'tournament' | 'omb_host' | 'tournament_host' | string
-  status: 'active' | 'inactive' | 'suspended'
-  totalMatchesHosted: number
-  unpaidCommission: number
-  commissionRate: number
-  totalEarned: number
+  assignedGame?: string
+  role?: 'omb' | 'tournament' | string
+  status: 'active' | 'disabled' | 'suspended'
+  totalMatchesHosted?: number
+  unpaidCommission?: number
+  commissionRate?: number
+  totalEarned?: number
   assignedTournaments?: string[]
   lastActive?: string
-  createdAt: string
+  createdAt?: string
+}
+
+export type Game = {
+  id: string
+  name: string
+  logoUrl?: string | null
+  createdAt?: string
+}
+
+export type GameMode = {
+  id: string
+  gameId: string
+  name: string
+  logoUrl?: string | null
+  createdAt?: string
+}
+
+export type PrizeTier = {
+  position: number
+  amount: number
+}
+
+export type CompetitionSchedule = {
+  id: string
+  modeId: string
+  type: 'omb' | 'tournament'
+  status: 'draft' | 'published' | 'closed'
+  entryFee: number
+  maxParticipants: number
+  teamSize: number
+  startsAt?: string | null
+  entryClosesAt?: string | null
+  durationMinutes?: number | null
+  roomRevealMinutesBeforeStart?: number | null
+  resultDeadlineMinutes: number
+  managerAlertAfterMinutes: number
+  tournamentMetric?: string | null
+  prizes: PrizeTier[]
+  guideVideoUrl?: string | null
+  notes?: string | null
+  createdAt?: string
+  // Display helpers
+  gameName?: string
+  modeName?: string
 }
 
 export type CompetitionItem = {
@@ -95,7 +139,7 @@ export type CompetitionItem = {
   type: 'omb' | 'tournament'
   game: string
   title: string
-  mode: 'Solo' | 'Duo' | 'Squad' | '1v1'
+  mode: 'Solo' | 'Duo' | 'Squad' | '1v1' | string
   entryFee: number
   prizePool: number
   status: 'upcoming' | 'open' | 'live' | 'completed' | 'cancelled'
@@ -116,8 +160,8 @@ export type NotificationBroadcast = {
   targetAudience: 'all' | 'active_players' | 'hosts' | 'specific_user'
   targetUserId?: string
   userId?: string
-  type: 'announcement' | 'match_alert' | 'bonus' | 'maintenance' | string
-  priority: 'high' | 'normal' | string
+  type: string
+  priority: string
   deepLink?: string
   sentAt: string
   sentBy?: string
@@ -125,21 +169,5 @@ export type NotificationBroadcast = {
   deliveredCount?: number
 }
 
-export type DailyScheduleItem = {
-  id: string
-  modeId?: string
-  game: string
-  title: string
-  type: 'omb' | 'tournament'
-  mode: 'Solo' | 'Duo' | 'Squad' | '1v1'
-  entryFee: number
-  maxParticipants: number
-  prizePool: number
-  dailySlots: string[]
-  recurrence: 'daily' | 'weekdays' | 'weekends' | 'custom'
-  status: 'published' | 'draft' | 'closed'
-  roomRevealMinutesBeforeStart?: number
-  managerAlert?: string
-  rulesNotes?: string
-  createdAt: string
-}
+export type DailyScheduleItem = CompetitionSchedule
+

@@ -1,297 +1,444 @@
 import { useState, useEffect } from 'react'
 import type { FormEvent } from 'react'
-import type { DailyScheduleItem } from '../types'
+import type { Game, GameMode, CompetitionSchedule, PrizeTier } from '../types'
 import { api } from '../services/api'
 import {
   Sparkles,
   CheckCircle2,
   AlertCircle,
-  Trash2,
-  PlayCircle,
-  PauseCircle,
   Plus,
-  X,
-  ListFilter,
-  PlusCircle,
   RefreshCw,
   Gamepad2,
+  Layers,
+  Calendar,
+  Play,
+  Clock,
+  Award,
 } from 'lucide-react'
 
-function normalizeScheduleItem(raw: unknown): DailyScheduleItem {
-  const d = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>
-  const rawSlots = d.dailySlots || d.slots || d.scheduleSlots || d.timings
-  let dailySlots: string[] = []
-  if (Array.isArray(rawSlots)) {
-    dailySlots = rawSlots.map((s) => String(s))
-  } else if (typeof rawSlots === 'string') {
-    dailySlots = rawSlots.split(',').map((s) => s.trim()).filter(Boolean)
-  } else if (d.scheduleTime || d.schedule_time || d.time) {
-    dailySlots = [String(d.scheduleTime || d.schedule_time || d.time)]
-  }
-
-  const rawRecurrence = String(d.recurrence || 'daily').toLowerCase()
-  const recurrence: 'daily' | 'weekdays' | 'weekends' | 'custom' =
-    rawRecurrence === 'weekdays' || rawRecurrence === 'weekends' || rawRecurrence === 'custom'
-      ? rawRecurrence
-      : 'daily'
-
-  const rawStatus = String(d.status || 'published').toLowerCase()
-  const status: 'published' | 'draft' | 'closed' =
-    rawStatus === 'draft' || rawStatus === 'closed' ? rawStatus : 'published'
-
-  const rawType = String(d.type || 'tournament').toLowerCase()
-  const type: 'omb' | 'tournament' = rawType.includes('omb') ? 'omb' : 'tournament'
-
-  const rawMode = String(d.mode || (type === 'omb' ? '1v1' : 'Squad'))
-  const mode: 'Solo' | 'Duo' | 'Squad' | '1v1' =
-    rawMode === 'Solo' || rawMode === 'Duo' || rawMode === 'Squad' || rawMode === '1v1'
-      ? rawMode
-      : 'Squad'
-
-  return {
-    id: String(d.id || d._id || d.scheduleId || ''),
-    game: String(d.game || d.gameTitle || 'BGMI'),
-    title: String(d.title || d.name || 'Schedule'),
-    type,
-    mode,
-    entryFee: Number(d.entryFee ?? d.entry_fee ?? d.fee ?? 0) || 0,
-    maxParticipants: Number(d.maxParticipants ?? d.maxSlots ?? d.slots ?? (type === 'omb' ? 2 : 100)) || 100,
-    prizePool: Number(d.prizePool ?? d.prize_pool ?? d.prize ?? 0) || 0,
-    dailySlots: dailySlots.length > 0 ? dailySlots : ['18:00'],
-    recurrence,
-    status,
-    roomRevealMinutesBeforeStart: Number(d.roomRevealMinutesBeforeStart ?? d.revealMinutes ?? 15) || 15,
-    createdAt: String(d.createdAt || d.created_at || new Date().toISOString()),
-  }
-}
-
-function extractSchedulesArray(data: unknown): DailyScheduleItem[] {
-  if (!data) return []
-  if (Array.isArray(data)) return data.map(normalizeScheduleItem).filter((s) => Boolean(s.id))
-  if (typeof data === 'object') {
-    const rec = data as Record<string, unknown>
-    if (Array.isArray(rec.schedules)) return rec.schedules.map(normalizeScheduleItem).filter((s) => Boolean(s.id))
-    if (Array.isArray(rec.data)) return rec.data.map(normalizeScheduleItem).filter((s) => Boolean(s.id))
-    if (Array.isArray(rec.competitions)) return rec.competitions.map(normalizeScheduleItem).filter((s) => Boolean(s.id))
-  }
-  return []
-}
-
 export function ContentView() {
-  const [activeTab, setActiveTab] = useState<'roster' | 'create'>('roster')
+  const [activeTab, setActiveTab] = useState<'schedules' | 'createSchedule' | 'games' | 'createGame' | 'modes' | 'createMode' | 'testJoin'>('schedules')
 
-  // Real Database Schedules State (no fake initial items)
-  const [schedules, setSchedules] = useState<DailyScheduleItem[]>([])
-  const [loadingList, setLoadingList] = useState(false)
+  // Data lists from backend
+  const [games, setGames] = useState<Game[]>([])
+  const [modes, setModes] = useState<GameMode[]>([])
+  const [schedules, setSchedules] = useState<CompetitionSchedule[]>([])
+  const [loadingGames, setLoadingGames] = useState(false)
+  const [loadingModes, setLoadingModes] = useState(false)
+  const [loadingSchedules, setLoadingSchedules] = useState(false)
 
-  // Form State
-  const [competitionType, setCompetitionType] = useState<'tournament' | 'omb'>('tournament')
-  const [game, setGame] = useState('BGMI')
-  const [customGameName, setCustomGameName] = useState('')
-  const [title, setTitle] = useState('')
-  const [mode, setMode] = useState<'Solo' | 'Duo' | 'Squad' | '1v1'>('Squad')
-
-  // Financials & Slots
-  const [entryFee, setEntryFee] = useState('50')
-  const [maxSlots, setMaxSlots] = useState('100')
-  const [prizePool, setPrizePool] = useState('3500')
-
-  // Recurring Schedule Slots
-  const [recurrence, setRecurrence] = useState<'daily' | 'weekdays' | 'weekends' | 'custom'>('daily')
-  const [dailySlots, setDailySlots] = useState<string[]>(['14:00', '18:00', '21:00'])
-  const [newSlotTime, setNewSlotTime] = useState('12:00')
-  const [revealTimeMinutes, setRevealTimeMinutes] = useState('15')
-
-  // Submission state
-  const [loading, setLoading] = useState(false)
-  const [actionSuccess, setActionSuccess] = useState('')
+  // Status & Feedback
   const [errorMessage, setErrorMessage] = useState('')
+  const [actionSuccess, setActionSuccess] = useState('')
 
-  async function fetchSchedulesFromDB() {
-    setLoadingList(true)
-    setErrorMessage('')
+  // Filter state for schedules
+  const [filterType, setFilterType] = useState<'all' | 'omb' | 'tournament'>('all')
+  const [filterModeId, setFilterModeId] = useState<string>('')
+
+  // ==========================================
+  // 1) Game Creation Form State
+  // POST /api/admin/competition/games
+  // { name: string, logoUrl?: string | null }
+  // ==========================================
+  const [newGameName, setNewGameName] = useState('')
+  const [newGameLogoUrl, setNewGameLogoUrl] = useState('')
+  const [creatingGame, setCreatingGame] = useState(false)
+
+  // ==========================================
+  // 2) Game Mode Creation Form State
+  // POST /api/admin/competition/modes
+  // { gameId: uuid, name: string, logoUrl?: string | null }
+  // ==========================================
+  const [selectedGameForMode, setSelectedGameForMode] = useState('')
+  const [newModeName, setNewModeName] = useState('')
+  const [newModeLogoUrl, setNewModeLogoUrl] = useState('')
+  const [creatingMode, setCreatingMode] = useState(false)
+
+  // ==========================================
+  // 3) Competition Schedule Creation Form State
+  // POST /api/admin/competition/schedules
+  // ==========================================
+  const [scheduleModeId, setScheduleModeId] = useState('')
+  const [scheduleType, setScheduleType] = useState<'omb' | 'tournament'>('omb')
+  const [scheduleStatus, setScheduleStatus] = useState<'draft' | 'published' | 'closed'>('published')
+  const [entryFee, setEntryFee] = useState('50')
+  const [maxParticipants, setMaxParticipants] = useState('2')
+  const [teamSize, setTeamSize] = useState('1')
+  
+  // OMB specific
+  const [startsAt, setStartsAt] = useState('')
+  const [roomRevealMinutes, setRoomRevealMinutes] = useState('15')
+  
+  // Tournament specific
+  const [entryClosesAt, setEntryClosesAt] = useState('')
+  const [durationMinutes, setDurationMinutes] = useState('60')
+  const [tournamentMetric, setTournamentMetric] = useState('score')
+  
+  // Common & Defaults
+  const [resultDeadlineMinutes, setResultDeadlineMinutes] = useState('90')
+  const [managerAlertMinutes, setManagerAlertMinutes] = useState('5')
+  const [guideVideoUrl, setGuideVideoUrl] = useState('')
+  const [notes, setNotes] = useState('')
+  
+  // Prizes ladder
+  const [prizes, setPrizes] = useState<PrizeTier[]>([
+    { position: 1, amount: 90 },
+  ])
+  const [creatingSchedule, setCreatingSchedule] = useState(false)
+
+  // ==========================================
+  // 7) Join / Test Match Creation State
+  // POST /api/competitions/join
+  // { scheduleId: uuid, gameUid: string, gameName: string }
+  // ==========================================
+  const [testScheduleId, setTestScheduleId] = useState('')
+  const [testGameUid, setTestGameUid] = useState('test-user-1')
+  const [testGameName, setTestGameName] = useState('PlayerOne')
+  const [joiningSchedule, setJoiningSchedule] = useState(false)
+
+  // Fetch Games: GET /api/competitions/games
+  async function fetchGames() {
+    setLoadingGames(true)
     try {
-      let list: DailyScheduleItem[] = []
-      try {
-        const data = await api<unknown>('/admin/competition/schedules')
-        list = extractSchedulesArray(data)
-      } catch {
-        try {
-          const altData = await api<unknown>('/competitions/schedules')
-          list = extractSchedulesArray(altData)
-        } catch {
-          const opsData = await api<unknown>('/operations/schedules')
-          list = extractSchedulesArray(opsData)
-        }
+      const res = await api<{ games?: Game[] }>('/competitions/games')
+      const list = Array.isArray(res?.games) ? res.games : Array.isArray(res) ? (res as Game[]) : []
+      setGames(list)
+      if (list.length > 0 && !selectedGameForMode) {
+        setSelectedGameForMode(list[0].id)
       }
+    } catch (err) {
+      setErrorMessage(err instanceof Error ? err.message : 'Failed to fetch games.')
+    } finally {
+      setLoadingGames(false)
+    }
+  }
+
+  // Fetch Modes: GET /api/competitions/modes?gameId=...
+  async function fetchModes(gameId?: string) {
+    setLoadingModes(true)
+    try {
+      const queryParam = gameId ? `?gameId=${encodeURIComponent(gameId)}` : ''
+      const res = await api<{ modes?: GameMode[] }>(`/competitions/modes${queryParam}`)
+      const list = Array.isArray(res?.modes) ? res.modes : Array.isArray(res) ? (res as GameMode[]) : []
+      setModes(list)
+      if (list.length > 0 && !scheduleModeId) {
+        setScheduleModeId(list[0].id)
+      }
+    } catch (err) {
+      setErrorMessage(err instanceof Error ? err.message : 'Failed to fetch game modes.')
+    } finally {
+      setLoadingModes(false)
+    }
+  }
+
+  // Fetch Schedules: GET /api/competitions/schedules?type=omb|tournament&modeId=...
+  async function fetchSchedules() {
+    setLoadingSchedules(true)
+    try {
+      const params = new URLSearchParams()
+      if (filterType !== 'all') {
+        params.append('type', filterType)
+      }
+      if (filterModeId) {
+        params.append('modeId', filterModeId)
+      }
+      const qs = params.toString() ? `?${params.toString()}` : ''
+      const res = await api<{ schedules?: CompetitionSchedule[] }>(`/competitions/schedules${qs}`)
+      const list = Array.isArray(res?.schedules) ? res.schedules : Array.isArray(res) ? (res as CompetitionSchedule[]) : []
       setSchedules(list)
     } catch (err) {
-      setErrorMessage(err instanceof Error ? err.message : 'Unable to connect to database for schedules.')
-      setSchedules([])
+      setErrorMessage(err instanceof Error ? err.message : 'Failed to fetch schedules.')
     } finally {
-      setLoadingList(false)
+      setLoadingSchedules(false)
     }
   }
 
   useEffect(() => {
-    let ignore = false
-    async function load() {
-      setLoadingList(true)
+    let isMounted = true
+
+    async function loadInitialData() {
+      setLoadingGames(true)
+      setLoadingModes(true)
+      setLoadingSchedules(true)
+
       try {
-        let list: DailyScheduleItem[] = []
-        try {
-          const data = await api<unknown>('/admin/competition/schedules')
-          list = extractSchedulesArray(data)
-        } catch {
-          try {
-            const altData = await api<unknown>('/competitions/schedules')
-            list = extractSchedulesArray(altData)
-          } catch {
-            const opsData = await api<unknown>('/operations/schedules')
-            list = extractSchedulesArray(opsData)
+        const gamesRes = await api<{ games?: Game[] }>('/competitions/games').catch(() => null)
+        if (isMounted && gamesRes) {
+          const list = Array.isArray(gamesRes?.games) ? gamesRes.games : Array.isArray(gamesRes) ? (gamesRes as Game[]) : []
+          setGames(list)
+          if (list.length > 0) {
+            setSelectedGameForMode((prev) => prev || list[0].id)
           }
         }
-        if (!ignore) {
-          setSchedules(list)
-        }
-      } catch (err) {
-        if (!ignore) {
-          setErrorMessage(err instanceof Error ? err.message : 'Database query failed.')
-          setSchedules([])
+      } finally {
+        if (isMounted) setLoadingGames(false)
+      }
+
+      try {
+        const modesRes = await api<{ modes?: GameMode[] }>('/competitions/modes').catch(() => null)
+        if (isMounted && modesRes) {
+          const list = Array.isArray(modesRes?.modes) ? modesRes.modes : Array.isArray(modesRes) ? (modesRes as GameMode[]) : []
+          setModes(list)
+          if (list.length > 0) {
+            setScheduleModeId((prev) => prev || list[0].id)
+          }
         }
       } finally {
-        if (!ignore) {
-          setLoadingList(false)
+        if (isMounted) setLoadingModes(false)
+      }
+
+      try {
+        const schedRes = await api<{ schedules?: CompetitionSchedule[] }>('/competitions/schedules').catch(() => null)
+        if (isMounted && schedRes) {
+          const list = Array.isArray(schedRes?.schedules) ? schedRes.schedules : Array.isArray(schedRes) ? (schedRes as CompetitionSchedule[]) : []
+          setSchedules(list)
         }
+      } finally {
+        if (isMounted) setLoadingSchedules(false)
       }
     }
-    load()
+
+    loadInitialData()
+
     return () => {
-      ignore = true
+      isMounted = false
     }
   }, [])
 
-  function handleAddSlot() {
-    if (!newSlotTime) return
-    if (!dailySlots.includes(newSlotTime)) {
-      const updated = [...dailySlots, newSlotTime].sort()
-      setDailySlots(updated)
-    }
-  }
+  // Auto-reload modes when selectedGameForMode changes
+  useEffect(() => {
+    if (!selectedGameForMode) return
+    let isMounted = true
+    const gameId = selectedGameForMode
 
-  function handleRemoveSlot(slot: string) {
-    setDailySlots(dailySlots.filter((s) => s !== slot))
-  }
-
-  function applyPreset(presetType: 'bgmi_prime' | 'ff_squad' | 'ludo_hourly' | 'omb_duel') {
-    if (presetType === 'bgmi_prime') {
-      setCompetitionType('tournament')
-      setGame('BGMI')
-      setTitle('BGMI Prime Squad')
-      setMode('Squad')
-      setEntryFee('50')
-      setMaxSlots('100')
-      setPrizePool('3500')
-      setDailySlots(['12:00', '15:00', '18:00', '21:30'])
-      setRevealTimeMinutes('15')
-      setRecurrence('daily')
-    } else if (presetType === 'ff_squad') {
-      setCompetitionType('tournament')
-      setGame('Free Fire MAX')
-      setTitle('Free Fire Daily')
-      setMode('Squad')
-      setEntryFee('30')
-      setMaxSlots('48')
-      setPrizePool('1000')
-      setDailySlots(['16:00', '19:00', '21:00'])
-      setRevealTimeMinutes('15')
-      setRecurrence('daily')
-    } else if (presetType === 'ludo_hourly') {
-      setCompetitionType('omb')
-      setGame('Ludo King')
-      setTitle('Ludo 1v1 Blitz')
-      setMode('1v1')
-      setEntryFee('20')
-      setMaxSlots('2')
-      setPrizePool('35')
-      setDailySlots(['11:00', '14:00', '17:00', '20:00', '22:00'])
-      setRevealTimeMinutes('5')
-      setRecurrence('daily')
-    } else if (presetType === 'omb_duel') {
-      setCompetitionType('omb')
-      setGame('BGMI')
-      setTitle('BGMI 1v1 Duel')
-      setMode('1v1')
-      setEntryFee('50')
-      setMaxSlots('2')
-      setPrizePool('90')
-      setDailySlots(['13:00', '16:00', '19:00', '21:00', '23:00'])
-      setRevealTimeMinutes('5')
-      setRecurrence('daily')
-    }
-  }
-
-  async function handleToggleScheduleStatus(id: string, currentStatus: 'published' | 'draft' | 'closed') {
-    const nextStatus: 'published' | 'draft' = currentStatus === 'published' ? 'draft' : 'published'
-    setErrorMessage('')
-    setActionSuccess('')
-
-    try {
-      await api(`/admin/competition/schedules/${id}/status`, {
-        method: 'PATCH',
-        body: JSON.stringify({ status: nextStatus }),
+    api<{ modes?: GameMode[] }>(`/competitions/modes?gameId=${encodeURIComponent(gameId)}`)
+      .then((res) => {
+        if (isMounted) {
+          const list = Array.isArray(res?.modes) ? res.modes : Array.isArray(res) ? (res as GameMode[]) : []
+          setModes(list)
+          if (list.length > 0) {
+            setScheduleModeId((prev) => prev || list[0].id)
+          }
+        }
       })
-      setSchedules((prev) =>
-        prev.map((item) => (item.id === id ? { ...item, status: nextStatus } : item))
-      )
-      setActionSuccess(`Schedule status updated to ${nextStatus}.`)
-    } catch (err) {
-      setErrorMessage(err instanceof Error ? err.message : 'Failed to update schedule status in database.')
+      .catch(() => undefined)
+
+    return () => {
+      isMounted = false
+    }
+  }, [selectedGameForMode])
+
+  // Adjust defaults when scheduleType toggles
+  function handleScheduleTypeChange(type: 'omb' | 'tournament') {
+    setScheduleType(type)
+    if (type === 'omb') {
+      setMaxParticipants('2')
+      setPrizes([{ position: 1, amount: 90 }])
+      if (!roomRevealMinutes) setRoomRevealMinutes('15')
+    } else {
+      setMaxParticipants('100')
+      setPrizes([
+        { position: 1, amount: 2000 },
+        { position: 2, amount: 1000 },
+        { position: 3, amount: 500 },
+      ])
+      if (!durationMinutes) setDurationMinutes('60')
+      if (!tournamentMetric) setTournamentMetric('score')
     }
   }
 
-  async function handleDeleteSchedule(id: string) {
-    setErrorMessage('')
-    setActionSuccess('')
-
-    try {
-      await api(`/admin/competition/schedules/${id}`, {
-        method: 'DELETE',
-      })
-      setSchedules((prev) => prev.filter((s) => s.id !== id))
-      setActionSuccess('Schedule removed from database.')
-    } catch (err) {
-      setErrorMessage(err instanceof Error ? err.message : 'Failed to delete schedule in database.')
-    }
+  // Prize ladder management
+  function addPrizeTier() {
+    const nextPos = prizes.length + 1
+    setPrizes([...prizes, { position: nextPos, amount: 0 }])
   }
 
-  async function handleCreateSchedule(e: FormEvent) {
+  function removePrizeTier(index: number) {
+    if (prizes.length <= 1) return
+    const updated = prizes.filter((_, i) => i !== index).map((p, idx) => ({ ...p, position: idx + 1 }))
+    setPrizes(updated)
+  }
+
+  function updatePrizeTier(index: number, amount: number) {
+    const updated = [...prizes]
+    updated[index].amount = Math.max(0, Math.round(amount))
+    setPrizes(updated)
+  }
+
+  // 1) Handle Game Creation: POST /api/admin/competition/games
+  async function handleCreateGame(e: FormEvent) {
     e.preventDefault()
-    setLoading(true)
+    setCreatingGame(true)
     setErrorMessage('')
     setActionSuccess('')
 
-    const effectiveGame = game === 'Custom' ? customGameName.trim() || 'Custom Game' : game
-    const cleanTitle = title.trim() || `${effectiveGame} ${mode}`
-
-    if (dailySlots.length === 0) {
-      setErrorMessage('Please add at least one time slot.')
-      setLoading(false)
+    const name = newGameName.trim()
+    if (!name || name.length > 128) {
+      setErrorMessage('Game name must be between 1 and 128 characters.')
+      setCreatingGame(false)
       return
     }
 
-    const payload = {
-      title: cleanTitle,
-      game: effectiveGame,
-      type: competitionType,
-      mode,
-      entryFee: Number(entryFee) || 0,
-      prizePool: Number(prizePool) || 0,
-      maxParticipants: Number(maxSlots) || (mode === '1v1' ? 2 : 100),
-      dailySlots,
-      recurrence,
-      roomRevealMinutesBeforeStart: Number(revealTimeMinutes) || 15,
-      status: 'published' as const,
+    const payload: { name: string; logoUrl?: string | null } = { name }
+    if (newGameLogoUrl.trim()) {
+      payload.logoUrl = newGameLogoUrl.trim()
+    }
+
+    try {
+      await api('/admin/competition/games', {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      })
+      setActionSuccess(`Game "${name}" created successfully.`)
+      setNewGameName('')
+      setNewGameLogoUrl('')
+      await fetchGames()
+      setActiveTab('games')
+    } catch (err) {
+      setErrorMessage(err instanceof Error ? err.message : 'Failed to create game.')
+    } finally {
+      setCreatingGame(false)
+    }
+  }
+
+  // 2) Handle Mode Creation: POST /api/admin/competition/modes
+  async function handleCreateMode(e: FormEvent) {
+    e.preventDefault()
+    setCreatingMode(true)
+    setErrorMessage('')
+    setActionSuccess('')
+
+    const gameId = selectedGameForMode
+    const name = newModeName.trim()
+
+    if (!gameId) {
+      setErrorMessage('Please select a game for this mode.')
+      setCreatingMode(false)
+      return
+    }
+
+    if (!name || name.length > 128) {
+      setErrorMessage('Mode name must be between 1 and 128 characters.')
+      setCreatingMode(false)
+      return
+    }
+
+    const payload: { gameId: string; name: string; logoUrl?: string | null } = {
+      gameId,
+      name,
+    }
+    if (newModeLogoUrl.trim()) {
+      payload.logoUrl = newModeLogoUrl.trim()
+    }
+
+    try {
+      await api('/admin/competition/modes', {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      })
+      setActionSuccess(`Mode "${name}" created successfully.`)
+      setNewModeName('')
+      setNewModeLogoUrl('')
+      await fetchModes(gameId)
+      setActiveTab('modes')
+    } catch (err) {
+      setErrorMessage(err instanceof Error ? err.message : 'Failed to create game mode.')
+    } finally {
+      setCreatingMode(false)
+    }
+  }
+
+  // 3) Handle Schedule Creation: POST /api/admin/competition/schedules
+  async function handleCreateSchedule(e: FormEvent) {
+    e.preventDefault()
+    setCreatingSchedule(true)
+    setErrorMessage('')
+    setActionSuccess('')
+
+    if (!scheduleModeId) {
+      setErrorMessage('Please select a Game Mode.')
+      setCreatingSchedule(false)
+      return
+    }
+
+    const feeNum = Math.round(Number(entryFee))
+    const maxPartNum = Math.round(Number(maxParticipants))
+    const teamSizeNum = Math.round(Number(teamSize)) || 1
+    const resDeadlineNum = Math.round(Number(resultDeadlineMinutes)) || 90
+    const mgrAlertNum = Math.round(Number(managerAlertMinutes)) || 5
+
+    if (feeNum <= 0) {
+      setErrorMessage('Entry fee must be an integer greater than 0.')
+      setCreatingSchedule(false)
+      return
+    }
+    if (maxPartNum <= 0) {
+      setErrorMessage('Max participants must be an integer greater than 0.')
+      setCreatingSchedule(false)
+      return
+    }
+
+    // Validation per backend contract:
+    // If type === "omb", startsAt and roomRevealMinutesBeforeStart are required
+    // If type === "tournament", entryClosesAt, durationMinutes, and tournamentMetric are required
+    if (scheduleType === 'omb') {
+      if (!startsAt) {
+        setErrorMessage('For OMB matches, Start Time (startsAt) is required.')
+        setCreatingSchedule(false)
+        return
+      }
+      if (roomRevealMinutes === '' || Number(roomRevealMinutes) < 0) {
+        setErrorMessage('Room Reveal Minutes (roomRevealMinutesBeforeStart) must be >= 0.')
+        setCreatingSchedule(false)
+        return
+      }
+    } else {
+      if (!entryClosesAt) {
+        setErrorMessage('For Tournaments, Entry Closes At is required.')
+        setCreatingSchedule(false)
+        return
+      }
+      if (!durationMinutes || Number(durationMinutes) <= 0) {
+        setErrorMessage('Duration in minutes must be an integer > 0.')
+        setCreatingSchedule(false)
+        return
+      }
+      if (!tournamentMetric.trim()) {
+        setErrorMessage('Tournament Metric (e.g. score, kills, placement) is required.')
+        setCreatingSchedule(false)
+        return
+      }
+    }
+
+    const payload: Record<string, unknown> = {
+      modeId: scheduleModeId,
+      type: scheduleType,
+      status: scheduleStatus,
+      entryFee: feeNum,
+      maxParticipants: maxPartNum,
+      teamSize: teamSizeNum,
+      resultDeadlineMinutes: resDeadlineNum,
+      managerAlertAfterMinutes: mgrAlertNum,
+      prizes: prizes.map((p) => ({ position: p.position, amount: Math.round(p.amount) })),
+    }
+
+    if (scheduleType === 'omb') {
+      payload.startsAt = new Date(startsAt).toISOString()
+      payload.roomRevealMinutesBeforeStart = Math.round(Number(roomRevealMinutes))
+    } else {
+      payload.entryClosesAt = new Date(entryClosesAt).toISOString()
+      payload.durationMinutes = Math.round(Number(durationMinutes))
+      payload.tournamentMetric = tournamentMetric.trim()
+      if (startsAt) {
+        payload.startsAt = new Date(startsAt).toISOString()
+      }
+    }
+
+    if (guideVideoUrl.trim()) {
+      payload.guideVideoUrl = guideVideoUrl.trim()
+    }
+    if (notes.trim()) {
+      payload.notes = notes.trim()
     }
 
     try {
@@ -299,15 +446,44 @@ export function ContentView() {
         method: 'POST',
         body: JSON.stringify(payload),
       })
-
-      setActionSuccess(`Schedule "${cleanTitle}" created in database.`)
-      await fetchSchedulesFromDB()
-      setActiveTab('roster')
-      setTitle('')
+      setActionSuccess(`Competition schedule created successfully.`)
+      await fetchSchedules()
+      setActiveTab('schedules')
     } catch (err) {
-      setErrorMessage(err instanceof Error ? err.message : 'Database error: failed to create schedule.')
+      setErrorMessage(err instanceof Error ? err.message : 'Failed to create competition schedule.')
     } finally {
-      setLoading(false)
+      setCreatingSchedule(false)
+    }
+  }
+
+  // 7) Handle Join / Test match: POST /api/competitions/join
+  async function handleJoinSchedule(e: FormEvent) {
+    e.preventDefault()
+    setJoiningSchedule(true)
+    setErrorMessage('')
+    setActionSuccess('')
+
+    if (!testScheduleId) {
+      setErrorMessage('Please select a Schedule ID to join.')
+      setJoiningSchedule(false)
+      return
+    }
+
+    try {
+      const res = await api<Record<string, unknown>>('/competitions/join', {
+        method: 'POST',
+        body: JSON.stringify({
+          scheduleId: testScheduleId,
+          gameUid: testGameUid.trim(),
+          gameName: testGameName.trim(),
+        }),
+      })
+
+      setActionSuccess(`Joined schedule! Match/Tournament instance created: ${JSON.stringify(res || 'OK')}`)
+    } catch (err) {
+      setErrorMessage(err instanceof Error ? err.message : 'Failed to join competition schedule.')
+    } finally {
+      setJoiningSchedule(false)
     }
   }
 
@@ -315,29 +491,60 @@ export function ContentView() {
     <div className="content-container">
       <div className="view-header">
         <div>
-          <h2>Daily Schedules</h2>
-          <p>Recurring daily matches synchronized with database</p>
+          <h2>Games & Schedules</h2>
+          <p>Strict backend integration for games, modes, schedules & matchmaking</p>
         </div>
         <div className="header-actions">
           <button
-            className="secondary small-btn"
-            onClick={fetchSchedulesFromDB}
-            disabled={loadingList}
-            title="Refresh database records"
+            className={`tab-btn ${activeTab === 'schedules' ? 'active-tab' : ''}`}
+            onClick={() => {
+              setActiveTab('schedules')
+              fetchSchedules()
+            }}
           >
-            <RefreshCw size={14} className={loadingList ? 'spinning' : ''} />
+            <Calendar size={14} /> Schedules ({schedules.length})
           </button>
           <button
-            className={`tab-btn ${activeTab === 'roster' ? 'active-tab' : ''}`}
-            onClick={() => setActiveTab('roster')}
+            className={`tab-btn ${activeTab === 'createSchedule' ? 'active-tab' : ''}`}
+            onClick={() => setActiveTab('createSchedule')}
           >
-            <ListFilter size={14} /> Active ({schedules.length})
+            <Plus size={14} /> New Schedule
           </button>
           <button
-            className={`tab-btn ${activeTab === 'create' ? 'active-tab' : ''}`}
-            onClick={() => setActiveTab('create')}
+            className={`tab-btn ${activeTab === 'games' ? 'active-tab' : ''}`}
+            onClick={() => {
+              setActiveTab('games')
+              fetchGames()
+            }}
           >
-            <PlusCircle size={14} /> New Schedule
+            <Gamepad2 size={14} /> Games ({games.length})
+          </button>
+          <button
+            className={`tab-btn ${activeTab === 'createGame' ? 'active-tab' : ''}`}
+            onClick={() => setActiveTab('createGame')}
+          >
+            <Plus size={14} /> New Game
+          </button>
+          <button
+            className={`tab-btn ${activeTab === 'modes' ? 'active-tab' : ''}`}
+            onClick={() => {
+              setActiveTab('modes')
+              fetchModes()
+            }}
+          >
+            <Layers size={14} /> Modes ({modes.length})
+          </button>
+          <button
+            className={`tab-btn ${activeTab === 'createMode' ? 'active-tab' : ''}`}
+            onClick={() => setActiveTab('createMode')}
+          >
+            <Plus size={14} /> New Mode
+          </button>
+          <button
+            className={`tab-btn ${activeTab === 'testJoin' ? 'active-tab' : ''}`}
+            onClick={() => setActiveTab('testJoin')}
+          >
+            <Play size={14} /> Test Join
           </button>
         </div>
       </div>
@@ -356,105 +563,134 @@ export function ContentView() {
         </div>
       )}
 
-      {activeTab === 'roster' && (
+      {/* ======================================================== */}
+      {/* TAB 1: SCHEDULES LIST (GET /api/competitions/schedules)  */}
+      {/* ======================================================== */}
+      {activeTab === 'schedules' && (
         <>
-          {loadingList ? (
+          <div className="section-divider">
+            <h3>Schedules from Database</h3>
+            <div className="filters-row">
+              <select
+                value={filterType}
+                onChange={(e) => setFilterType(e.target.value as 'all' | 'omb' | 'tournament')}
+                className="filter-select"
+              >
+                <option value="all">All Types</option>
+                <option value="omb">OMB (1v1)</option>
+                <option value="tournament">Tournaments</option>
+              </select>
+
+              <select
+                value={filterModeId}
+                onChange={(e) => setFilterModeId(e.target.value)}
+                className="filter-select"
+              >
+                <option value="">All Game Modes</option>
+                {modes.map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.name} ({m.id.slice(0, 8)}...)
+                  </option>
+                ))}
+              </select>
+
+              <button
+                className="secondary small-btn"
+                onClick={fetchSchedules}
+                disabled={loadingSchedules}
+                title="Refresh from /api/competitions/schedules"
+              >
+                <RefreshCw size={13} className={loadingSchedules ? 'spinning' : ''} /> Refresh
+              </button>
+            </div>
+          </div>
+
+          {loadingSchedules ? (
             <div className="loading-card">
               <RefreshCw size={24} className="spinning" color="#aa3bff" />
-              <p>Loading database schedules...</p>
+              <p>Querying /api/competitions/schedules...</p>
             </div>
           ) : schedules.length === 0 ? (
             <div className="state-card">
               <div className="state-icon">
-                <Gamepad2 size={32} color="#aa3bff" />
+                <Calendar size={32} color="#aa3bff" />
               </div>
-              <h3>No Schedules in Database</h3>
+              <h3>No Schedules Found in Database</h3>
               <p className="state-desc">
-                No recurring match schedules are currently stored in the database. Click "New Schedule" to configure and publish recurring tournaments.
+                No competition schedules match your query on <code>/api/competitions/schedules</code>. Click "New Schedule" to create a new match schedule.
               </p>
-              <button
-                className="primary small-btn"
-                onClick={() => setActiveTab('create')}
-              >
-                <Plus size={14} /> Create First Schedule
+              <button className="primary small-btn" onClick={() => setActiveTab('createSchedule')}>
+                <Plus size={14} /> Create Schedule
               </button>
             </div>
           ) : (
             <div className="schedules-grid">
-              {schedules.map((schedule) => (
-                <article
-                  key={schedule.id}
-                  className={`schedule-card ${schedule.status === 'draft' ? 'draft' : ''}`}
-                >
+              {schedules.map((item) => (
+                <article key={item.id} className="schedule-card">
                   <div className="schedule-card-header">
-                    <span className="game-badge">{schedule.game}</span>
-                    <span
-                      className={`status-pill ${
-                        schedule.status === 'published' ? 'published' : 'draft'
-                      }`}
-                    >
-                      {schedule.status === 'published' ? 'Active' : 'Draft'}
+                    <span className="badge-tag">{item.type.toUpperCase()}</span>
+                    <span className={`status-pill ${item.status || 'draft'}`}>
+                      {(item.status || 'draft').toUpperCase()}
                     </span>
                   </div>
 
-                  <h4 className="schedule-title">{schedule.title}</h4>
-
-                  <div className="schedule-meta-row">
-                    <span className="badge-tag">{schedule.type.toUpperCase()}</span>
-                    <span className="badge-tag">{schedule.mode}</span>
-                    <span className="badge-tag">{schedule.recurrence}</span>
-                  </div>
-
-                  {/* Daily Slots */}
-                  <div className="schedule-slots-section">
-                    <span className="slots-label">Daily Slots:</span>
-                    <div className="slots-chip-list">
-                      {schedule.dailySlots.map((slot) => (
-                        <span className="time-chip" key={slot}>
-                          {slot}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
+                  <h4 className="schedule-title">
+                    Mode ID: <small className="mono-code">{item.modeId}</small>
+                  </h4>
 
                   <div className="schedule-stats-grid">
                     <div className="sstat">
-                      <span>Entry Fee</span>
-                      <strong>{schedule.entryFee} Coins</strong>
+                      <span>Fee</span>
+                      <strong>{item.entryFee} Coins</strong>
                     </div>
                     <div className="sstat">
-                      <span>Prize Pool</span>
-                      <strong>₹{schedule.prizePool}</strong>
+                      <span>Max Slots</span>
+                      <strong>{item.maxParticipants}</strong>
                     </div>
                     <div className="sstat">
-                      <span>Capacity</span>
-                      <strong>{schedule.maxParticipants} slots</strong>
+                      <span>Team Size</span>
+                      <strong>{item.teamSize}</strong>
                     </div>
+                    <div className="sstat">
+                      <span>Prizes</span>
+                      <strong>{item.prizes?.length || 0} Tiers</strong>
+                    </div>
+                  </div>
+
+                  <div className="schedule-details-extra">
+                    {item.startsAt && (
+                      <div className="detail-line">
+                        <Clock size={12} />
+                        <span>Starts: {new Date(item.startsAt).toLocaleString()}</span>
+                      </div>
+                    )}
+                    {item.entryClosesAt && (
+                      <div className="detail-line">
+                        <Clock size={12} />
+                        <span>Closes: {new Date(item.entryClosesAt).toLocaleString()}</span>
+                      </div>
+                    )}
+                    {item.durationMinutes && (
+                      <div className="detail-line">
+                        <span>Duration: {item.durationMinutes} mins</span>
+                      </div>
+                    )}
+                    {item.tournamentMetric && (
+                      <div className="detail-line">
+                        <span>Metric: {item.tournamentMetric}</span>
+                      </div>
+                    )}
                   </div>
 
                   <div className="schedule-card-actions">
                     <button
-                      type="button"
-                      className="secondary small-btn"
-                      onClick={() => handleToggleScheduleStatus(schedule.id, schedule.status)}
+                      className="primary small-btn"
+                      onClick={() => {
+                        setTestScheduleId(item.id)
+                        setActiveTab('testJoin')
+                      }}
                     >
-                      {schedule.status === 'published' ? (
-                        <>
-                          <PauseCircle size={13} /> Pause
-                        </>
-                      ) : (
-                        <>
-                          <PlayCircle size={13} /> Activate
-                        </>
-                      )}
-                    </button>
-                    <button
-                      type="button"
-                      className="danger small-btn icon-only"
-                      onClick={() => handleDeleteSchedule(schedule.id)}
-                      title="Delete Schedule"
-                    >
-                      <Trash2 size={13} />
+                      <Play size={12} /> Test Join Instance
                     </button>
                   </div>
                 </article>
@@ -464,190 +700,252 @@ export function ContentView() {
         </>
       )}
 
-      {activeTab === 'create' && (
+      {/* =================================================================== */}
+      {/* TAB 2: CREATE SCHEDULE (POST /api/admin/competition/schedules)       */}
+      {/* =================================================================== */}
+      {activeTab === 'createSchedule' && (
         <div className="schedule-create-view">
-          {/* Quick Presets */}
-          <div className="presets-bar">
-            <span className="presets-title">
-              <Sparkles size={14} color="#8b5cf6" /> Presets:
-            </span>
-            <button
-              type="button"
-              className="preset-chip"
-              onClick={() => applyPreset('bgmi_prime')}
-            >
-              BGMI Prime
-            </button>
-            <button
-              type="button"
-              className="preset-chip"
-              onClick={() => applyPreset('ff_squad')}
-            >
-              Free Fire
-            </button>
-            <button
-              type="button"
-              className="preset-chip"
-              onClick={() => applyPreset('ludo_hourly')}
-            >
-              Ludo 1v1
-            </button>
-            <button
-              type="button"
-              className="preset-chip"
-              onClick={() => applyPreset('omb_duel')}
-            >
-              1v1 Duel
-            </button>
-          </div>
-
           <form className="admin-form-card" onSubmit={handleCreateSchedule}>
+            <div className="form-legend">
+              <Sparkles size={16} color="#aa3bff" />
+              <strong>POST /api/admin/competition/schedules</strong>
+            </div>
+
             <div className="form-grid">
               <label>
-                Type
+                Type *
                 <select
-                  value={competitionType}
-                  onChange={(e) =>
-                    setCompetitionType(e.target.value as 'tournament' | 'omb')
-                  }
+                  value={scheduleType}
+                  onChange={(e) => handleScheduleTypeChange(e.target.value as 'omb' | 'tournament')}
                 >
+                  <option value="omb">OMB (One Match Battle - 1v1)</option>
                   <option value="tournament">Tournament (Multiplayer)</option>
-                  <option value="omb">OMB (1v1)</option>
                 </select>
               </label>
 
               <label>
-                Game
+                Game Mode (modeId) *
                 <select
-                  value={game}
-                  onChange={(e) => setGame(e.target.value)}
+                  required
+                  value={scheduleModeId}
+                  onChange={(e) => setScheduleModeId(e.target.value)}
                 >
-                  <option value="BGMI">BGMI</option>
-                  <option value="Free Fire MAX">Free Fire MAX</option>
-                  <option value="Call of Duty: Mobile">Call of Duty: Mobile</option>
-                  <option value="Ludo King">Ludo King</option>
-                  <option value="Custom">Custom Game</option>
+                  <option value="">-- Select Mode --</option>
+                  {modes.map((m) => (
+                    <option key={m.id} value={m.id}>
+                      {m.name} ({m.id})
+                    </option>
+                  ))}
                 </select>
               </label>
 
-              {game === 'Custom' && (
-                <label>
-                  Custom Game Name
-                  <input
-                    required
-                    type="text"
-                    placeholder="Game title"
-                    value={customGameName}
-                    onChange={(e) => setCustomGameName(e.target.value)}
-                  />
-                </label>
-              )}
-
               <label>
-                Schedule Title
-                <input
-                  type="text"
-                  placeholder="e.g. BGMI Daily Squad"
-                  value={title}
-                  onChange={(e) => setTitle(e.target.value)}
-                />
-              </label>
-
-              <label>
-                Mode
+                Status
                 <select
-                  value={mode}
-                  onChange={(e) =>
-                    setMode(e.target.value as 'Solo' | 'Duo' | 'Squad' | '1v1')
-                  }
+                  value={scheduleStatus}
+                  onChange={(e) => setScheduleStatus(e.target.value as 'draft' | 'published' | 'closed')}
                 >
-                  <option value="Solo">Solo</option>
-                  <option value="Duo">Duo</option>
-                  <option value="Squad">Squad</option>
-                  <option value="1v1">1v1</option>
+                  <option value="published">Published</option>
+                  <option value="draft">Draft</option>
+                  <option value="closed">Closed</option>
                 </select>
               </label>
 
               <label>
-                Entry Fee (Coins)
+                Entry Fee (Coins, integer &gt; 0) *
                 <input
                   required
                   type="number"
-                  min="0"
+                  min="1"
+                  step="1"
                   value={entryFee}
                   onChange={(e) => setEntryFee(e.target.value)}
                 />
               </label>
 
               <label>
-                Prize Pool (₹)
+                Max Participants (integer &gt; 0) *
                 <input
                   required
                   type="number"
-                  min="0"
-                  value={prizePool}
-                  onChange={(e) => setPrizePool(e.target.value)}
+                  min="1"
+                  step="1"
+                  value={maxParticipants}
+                  onChange={(e) => setMaxParticipants(e.target.value)}
                 />
               </label>
 
               <label>
-                Max Slots
+                Team Size (default 1)
                 <input
-                  required
                   type="number"
-                  min="2"
-                  value={maxSlots}
-                  onChange={(e) => setMaxSlots(e.target.value)}
+                  min="1"
+                  step="1"
+                  value={teamSize}
+                  onChange={(e) => setTeamSize(e.target.value)}
                 />
-              </label>
-
-              <label>
-                Recurrence
-                <select
-                  value={recurrence}
-                  onChange={(e) =>
-                    setRecurrence(e.target.value as 'daily' | 'weekdays' | 'weekends' | 'custom')
-                  }
-                >
-                  <option value="daily">Daily (Every Day)</option>
-                  <option value="weekdays">Weekdays (Mon-Fri)</option>
-                  <option value="weekends">Weekends (Sat-Sun)</option>
-                </select>
               </label>
             </div>
 
-            {/* Daily Slots */}
+            {/* Type Specific Requirements */}
+            <div className="contract-highlight-box">
+              {scheduleType === 'omb' ? (
+                <div>
+                  <h4>OMB Specific Fields (Required)</h4>
+                  <div className="form-grid">
+                    <label>
+                      Starts At (startsAt) *
+                      <input
+                        required
+                        type="datetime-local"
+                        value={startsAt}
+                        onChange={(e) => setStartsAt(e.target.value)}
+                      />
+                    </label>
+
+                    <label>
+                      Room Reveal Minutes Before Start (&gt;= 0) *
+                      <input
+                        required
+                        type="number"
+                        min="0"
+                        step="1"
+                        value={roomRevealMinutes}
+                        onChange={(e) => setRoomRevealMinutes(e.target.value)}
+                      />
+                    </label>
+                  </div>
+                </div>
+              ) : (
+                <div>
+                  <h4>Tournament Specific Fields (Required)</h4>
+                  <div className="form-grid">
+                    <label>
+                      Entry Closes At (entryClosesAt) *
+                      <input
+                        required
+                        type="datetime-local"
+                        value={entryClosesAt}
+                        onChange={(e) => setEntryClosesAt(e.target.value)}
+                      />
+                    </label>
+
+                    <label>
+                      Duration (durationMinutes &gt; 0) *
+                      <input
+                        required
+                        type="number"
+                        min="1"
+                        step="1"
+                        placeholder="60"
+                        value={durationMinutes}
+                        onChange={(e) => setDurationMinutes(e.target.value)}
+                      />
+                    </label>
+
+                    <label>
+                      Tournament Metric (e.g. score, kills, placement) *
+                      <input
+                        required
+                        type="text"
+                        placeholder="score"
+                        value={tournamentMetric}
+                        onChange={(e) => setTournamentMetric(e.target.value)}
+                      />
+                    </label>
+
+                    <label>
+                      Starts At (Optional for tournament)
+                      <input
+                        type="datetime-local"
+                        value={startsAt}
+                        onChange={(e) => setStartsAt(e.target.value)}
+                      />
+                    </label>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Common Fields */}
+            <div className="form-grid">
+              <label>
+                Result Deadline Minutes (default 90)
+                <input
+                  type="number"
+                  min="1"
+                  step="1"
+                  value={resultDeadlineMinutes}
+                  onChange={(e) => setResultDeadlineMinutes(e.target.value)}
+                />
+              </label>
+
+              <label>
+                Manager Alert After Minutes (default 5)
+                <input
+                  type="number"
+                  min="0"
+                  step="1"
+                  value={managerAlertMinutes}
+                  onChange={(e) => setManagerAlertMinutes(e.target.value)}
+                />
+              </label>
+
+              <label>
+                Guide Video URL (Optional)
+                <input
+                  type="url"
+                  placeholder="https://youtube.com/watch?v=..."
+                  value={guideVideoUrl}
+                  onChange={(e) => setGuideVideoUrl(e.target.value)}
+                />
+              </label>
+
+              <label>
+                Notes (Optional)
+                <input
+                  type="text"
+                  placeholder="Schedule notes"
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                />
+              </label>
+            </div>
+
+            {/* Prize Ladder */}
             <div className="multi-slots-box">
-              <span className="slots-header-label">Daily Time Slots ({dailySlots.length}):</span>
-              <div className="slots-chip-editor">
-                {dailySlots.map((slot) => (
-                  <span className="editable-time-chip" key={slot}>
-                    {slot}
-                    <button
-                      type="button"
-                      onClick={() => handleRemoveSlot(slot)}
-                      title="Remove Slot"
-                    >
-                      <X size={12} />
-                    </button>
-                  </span>
-                ))}
+              <div className="slots-header-line">
+                <span className="slots-header-label">
+                  <Award size={14} /> Prize Ladder (Array of position & amount):
+                </span>
+                <button type="button" className="secondary small-btn" onClick={addPrizeTier}>
+                  <Plus size={12} /> Add Position
+                </button>
               </div>
 
-              <div className="add-slot-row">
-                <input
-                  type="time"
-                  className="time-input"
-                  value={newSlotTime}
-                  onChange={(e) => setNewSlotTime(e.target.value)}
-                />
-                <button
-                  type="button"
-                  className="secondary small-btn"
-                  onClick={handleAddSlot}
-                >
-                  <Plus size={13} /> Add Slot
-                </button>
+              <div className="prizes-editor-list">
+                {prizes.map((p, idx) => (
+                  <div key={idx} className="prize-row-edit">
+                    <span className="pos-badge">#{p.position}</span>
+                    <input
+                      type="number"
+                      min="0"
+                      step="1"
+                      placeholder="Amount ₹"
+                      value={p.amount}
+                      onChange={(e) => updatePrizeTier(idx, Number(e.target.value))}
+                    />
+                    {prizes.length > 1 && (
+                      <button
+                        type="button"
+                        className="danger small-btn icon-only"
+                        onClick={() => removePrizeTier(idx)}
+                      >
+                        ✕
+                      </button>
+                    )}
+                  </div>
+                ))}
               </div>
             </div>
 
@@ -655,12 +953,344 @@ export function ContentView() {
               <button
                 type="button"
                 className="secondary"
-                onClick={() => setActiveTab('roster')}
+                onClick={() => setActiveTab('schedules')}
               >
                 Cancel
               </button>
-              <button type="submit" className="primary" disabled={loading}>
-                {loading ? 'Saving to Database...' : 'Save Schedule'}
+              <button type="submit" className="primary" disabled={creatingSchedule}>
+                {creatingSchedule ? 'Submitting to Backend...' : 'Create Schedule (POST /api/admin/competition/schedules)'}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* ======================================================== */}
+      {/* TAB 3: GAMES LIST (GET /api/competitions/games)           */}
+      {/* ======================================================== */}
+      {activeTab === 'games' && (
+        <div className="games-tab-content">
+          <div className="section-divider">
+            <h3>Games from Database (GET /api/competitions/games)</h3>
+            <button
+              className="secondary small-btn"
+              onClick={fetchGames}
+              disabled={loadingGames}
+            >
+              <RefreshCw size={13} className={loadingGames ? 'spinning' : ''} /> Refresh
+            </button>
+          </div>
+
+          {loadingGames ? (
+            <div className="loading-card">
+              <RefreshCw size={24} className="spinning" color="#aa3bff" />
+              <p>Fetching /api/competitions/games...</p>
+            </div>
+          ) : games.length === 0 ? (
+            <div className="state-card">
+              <div className="state-icon">
+                <Gamepad2 size={32} color="#aa3bff" />
+              </div>
+              <h3>No Games Found</h3>
+              <p className="state-desc">
+                No games currently exist on <code>/api/competitions/games</code>. Click "New Game" to register one.
+              </p>
+              <button className="primary small-btn" onClick={() => setActiveTab('createGame')}>
+                <Plus size={14} /> Create First Game
+              </button>
+            </div>
+          ) : (
+            <div className="games-grid">
+              {games.map((g) => (
+                <article key={g.id} className="game-card">
+                  <div className="game-card-top">
+                    {g.logoUrl ? (
+                      <img src={g.logoUrl} alt={g.name} className="game-logo-img" referrerPolicy="no-referrer" />
+                    ) : (
+                      <div className="game-logo-placeholder">
+                        <Gamepad2 size={24} />
+                      </div>
+                    )}
+                    <div>
+                      <h4>{g.name}</h4>
+                      <small className="mono-code">UUID: {g.id}</small>
+                    </div>
+                  </div>
+                  <div className="game-card-actions">
+                    <button
+                      className="secondary small-btn"
+                      onClick={() => {
+                        setSelectedGameForMode(g.id)
+                        setActiveTab('createMode')
+                      }}
+                    >
+                      <Plus size={12} /> Add Mode
+                    </button>
+                  </div>
+                </article>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ======================================================== */}
+      {/* TAB 4: CREATE GAME (POST /api/admin/competition/games)    */}
+      {/* ======================================================== */}
+      {activeTab === 'createGame' && (
+        <div className="game-create-view">
+          <form className="admin-form-card" onSubmit={handleCreateGame}>
+            <div className="form-legend">
+              <Gamepad2 size={16} color="#aa3bff" />
+              <strong>POST /api/admin/competition/games</strong>
+            </div>
+
+            <div className="form-grid">
+              <label>
+                Game Name (min 1, max 128) *
+                <input
+                  required
+                  type="text"
+                  maxLength={128}
+                  placeholder="e.g. PUBG Mobile"
+                  value={newGameName}
+                  onChange={(e) => setNewGameName(e.target.value)}
+                />
+              </label>
+
+              <label>
+                Logo URL (Optional, valid URL if present)
+                <input
+                  type="url"
+                  placeholder="https://example.com/logo.png"
+                  value={newGameLogoUrl}
+                  onChange={(e) => setNewGameLogoUrl(e.target.value)}
+                />
+              </label>
+            </div>
+
+            <div className="form-actions-row">
+              <button
+                type="button"
+                className="secondary"
+                onClick={() => setActiveTab('games')}
+              >
+                Cancel
+              </button>
+              <button type="submit" className="primary" disabled={creatingGame}>
+                {creatingGame ? 'Submitting...' : 'Create Game (POST /api/admin/competition/games)'}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* ======================================================== */}
+      {/* TAB 5: MODES LIST (GET /api/competitions/modes)          */}
+      {/* ======================================================== */}
+      {activeTab === 'modes' && (
+        <div className="modes-tab-content">
+          <div className="section-divider">
+            <h3>Game Modes from Database (GET /api/competitions/modes)</h3>
+            <div className="filters-row">
+              <select
+                value={selectedGameForMode}
+                onChange={(e) => setSelectedGameForMode(e.target.value)}
+                className="filter-select"
+              >
+                <option value="">All Games</option>
+                {games.map((g) => (
+                  <option key={g.id} value={g.id}>
+                    {g.name}
+                  </option>
+                ))}
+              </select>
+              <button
+                className="secondary small-btn"
+                onClick={() => fetchModes(selectedGameForMode)}
+                disabled={loadingModes}
+              >
+                <RefreshCw size={13} className={loadingModes ? 'spinning' : ''} /> Refresh
+              </button>
+            </div>
+          </div>
+
+          {loadingModes ? (
+            <div className="loading-card">
+              <RefreshCw size={24} className="spinning" color="#aa3bff" />
+              <p>Fetching /api/competitions/modes...</p>
+            </div>
+          ) : modes.length === 0 ? (
+            <div className="state-card">
+              <div className="state-icon">
+                <Layers size={32} color="#aa3bff" />
+              </div>
+              <h3>No Modes Found</h3>
+              <p className="state-desc">
+                No game modes exist on <code>/api/competitions/modes</code>. Click "New Mode" to create one.
+              </p>
+              <button className="primary small-btn" onClick={() => setActiveTab('createMode')}>
+                <Plus size={14} /> Create First Mode
+              </button>
+            </div>
+          ) : (
+            <div className="games-grid">
+              {modes.map((m) => (
+                <article key={m.id} className="game-card">
+                  <div className="game-card-top">
+                    {m.logoUrl ? (
+                      <img src={m.logoUrl} alt={m.name} className="game-logo-img" referrerPolicy="no-referrer" />
+                    ) : (
+                      <div className="game-logo-placeholder">
+                        <Layers size={24} />
+                      </div>
+                    )}
+                    <div>
+                      <h4>{m.name}</h4>
+                      <small className="mono-code">Mode ID: {m.id}</small>
+                      <br />
+                      <small className="muted">Game ID: {m.gameId}</small>
+                    </div>
+                  </div>
+                  <div className="game-card-actions">
+                    <button
+                      className="primary small-btn"
+                      onClick={() => {
+                        setScheduleModeId(m.id)
+                        setActiveTab('createSchedule')
+                      }}
+                    >
+                      <Plus size={12} /> Schedule Match
+                    </button>
+                  </div>
+                </article>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ======================================================== */}
+      {/* TAB 6: CREATE MODE (POST /api/admin/competition/modes)    */}
+      {/* ======================================================== */}
+      {activeTab === 'createMode' && (
+        <div className="mode-create-view">
+          <form className="admin-form-card" onSubmit={handleCreateMode}>
+            <div className="form-legend">
+              <Layers size={16} color="#aa3bff" />
+              <strong>POST /api/admin/competition/modes</strong>
+            </div>
+
+            <div className="form-grid">
+              <label>
+                Target Game (gameId UUID) *
+                <select
+                  required
+                  value={selectedGameForMode}
+                  onChange={(e) => setSelectedGameForMode(e.target.value)}
+                >
+                  <option value="">-- Select Game --</option>
+                  {games.map((g) => (
+                    <option key={g.id} value={g.id}>
+                      {g.name} ({g.id})
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label>
+                Mode Name (min 1, max 128) *
+                <input
+                  required
+                  type="text"
+                  maxLength={128}
+                  placeholder="e.g. Solo, Squad, 1v1 Blitz"
+                  value={newModeName}
+                  onChange={(e) => setNewModeName(e.target.value)}
+                />
+              </label>
+
+              <label>
+                Mode Logo URL (Optional)
+                <input
+                  type="url"
+                  placeholder="https://example.com/mode.png"
+                  value={newModeLogoUrl}
+                  onChange={(e) => setNewModeLogoUrl(e.target.value)}
+                />
+              </label>
+            </div>
+
+            <div className="form-actions-row">
+              <button
+                type="button"
+                className="secondary"
+                onClick={() => setActiveTab('modes')}
+              >
+                Cancel
+              </button>
+              <button type="submit" className="primary" disabled={creatingMode}>
+                {creatingMode ? 'Submitting...' : 'Create Mode (POST /api/admin/competition/modes)'}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* ======================================================== */}
+      {/* TAB 7: TEST JOIN (POST /api/competitions/join)           */}
+      {/* ======================================================== */}
+      {activeTab === 'testJoin' && (
+        <div className="join-test-view">
+          <form className="admin-form-card" onSubmit={handleJoinSchedule}>
+            <div className="form-legend">
+              <Play size={16} color="#aa3bff" />
+              <strong>POST /api/competitions/join (Auto-creates match/tournament instance)</strong>
+            </div>
+
+            <div className="form-grid">
+              <label>
+                Schedule ID (UUID) *
+                <select
+                  required
+                  value={testScheduleId}
+                  onChange={(e) => setTestScheduleId(e.target.value)}
+                >
+                  <option value="">-- Select Schedule --</option>
+                  {schedules.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.type.toUpperCase()} - {s.entryFee} coins ({s.id})
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label>
+                Game UID (e.g. In-game player ID) *
+                <input
+                  required
+                  type="text"
+                  placeholder="user-123"
+                  value={testGameUid}
+                  onChange={(e) => setTestGameUid(e.target.value)}
+                />
+              </label>
+
+              <label>
+                Game Name (In-game IGN) *
+                <input
+                  required
+                  type="text"
+                  placeholder="PUBG Mobile"
+                  value={testGameName}
+                  onChange={(e) => setTestGameName(e.target.value)}
+                />
+              </label>
+            </div>
+
+            <div className="form-actions-row">
+              <button type="submit" className="primary" disabled={joiningSchedule}>
+                {joiningSchedule ? 'Joining...' : 'Execute Join (POST /api/competitions/join)'}
               </button>
             </div>
           </form>
