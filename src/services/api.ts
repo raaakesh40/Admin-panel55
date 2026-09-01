@@ -172,7 +172,23 @@ export async function api<T>(path: string, options?: RequestInit): Promise<T> {
 
   if (!response.ok) {
     const errData = await response.json().catch(() => null)
-    let errorMessage = errData?.message || errData?.error
+    let errorMessage =
+      errData?.message ||
+      errData?.error ||
+      errData?.detail ||
+      errData?.details ||
+      errData?.msg
+    
+    if (!errorMessage && Array.isArray(errData?.errors)) {
+      errorMessage = errData.errors
+        .map((item: { path?: string[]; message?: string; field?: string } | string) =>
+          typeof item === 'string'
+            ? item
+            : `${item.path?.join('.') || item.field || 'Field'}: ${item.message || 'Invalid value'}`
+        )
+        .join(', ')
+    }
+
     if (errorMessage && typeof errorMessage === 'string') {
       try {
         const parsed = JSON.parse(errorMessage)
@@ -185,7 +201,20 @@ export async function api<T>(path: string, options?: RequestInit): Promise<T> {
         // use original string
       }
     }
-    throw new Error(errorMessage ?? `Request failed (${response.status})`)
+
+    if (!errorMessage) {
+      if (response.status === 409) {
+        errorMessage = 'A mode with this name already exists in this game.'
+      } else if (response.status === 400) {
+        errorMessage = 'Invalid request parameters submitted.'
+      } else if (response.status === 401 || response.status === 403) {
+        errorMessage = 'Authentication / permission error.'
+      } else {
+        errorMessage = `Request failed (${response.status})`
+      }
+    }
+
+    throw new Error(errorMessage)
   }
 
   // Check if response headers returned an auth token

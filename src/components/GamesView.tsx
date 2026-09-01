@@ -126,9 +126,18 @@ export function GamesView({ onNavigateToOmb, onNavigateToTournament }: GamesView
       return
     }
 
-    const payload: { name: string; logoUrl?: string | null } = { name }
-    if (newGameLogoUrl.trim()) {
-      payload.logoUrl = newGameLogoUrl.trim()
+    const isDuplicate = games.some(
+      (g) => g.name.trim().toLowerCase() === name.toLowerCase()
+    )
+    if (isDuplicate) {
+      setErrorMessage('A game with this name already exists in the catalog.')
+      setCreatingGame(false)
+      return
+    }
+
+    const payload = {
+      name,
+      logoUrl: newGameLogoUrl.trim() || null,
     }
 
     try {
@@ -143,7 +152,18 @@ export function GamesView({ onNavigateToOmb, onNavigateToTournament }: GamesView
       setShowCreateModal(false)
       await loadData()
     } catch (err) {
-      setErrorMessage(err instanceof Error ? err.message : 'Failed to create game on /api/admin/competition/games')
+      const msg = err instanceof Error ? err.message : String(err)
+      if (
+        msg.includes('409') ||
+        msg.toLowerCase().includes('already exists') ||
+        msg.toLowerCase().includes('duplicate') ||
+        msg.toLowerCase().includes('unique') ||
+        msg.toLowerCase().includes('23505')
+      ) {
+        setErrorMessage('A game with this name already exists in the catalog.')
+      } else {
+        setErrorMessage(msg || 'Failed to create game')
+      }
     } finally {
       setCreatingGame(false)
     }

@@ -275,13 +275,35 @@ export function OmbView({ initialGameId }: OmbViewProps) {
       setCreatingMode(false)
       return
     }
-    if (feeNum <= 0) {
-      setErrorMessage('Entry fee must be an integer greater than 0.')
+
+    // Client-side uniqueness check for (gameId, name)
+    const isDuplicate = modes.some(
+      (m) => m.gameId === gameId && m.name.trim().toLowerCase() === name.toLowerCase()
+    )
+    if (isDuplicate) {
+      setErrorMessage('A mode with this name already exists in this game.')
       setCreatingMode(false)
       return
     }
-    if (maxPartNum <= 0) {
-      setErrorMessage('Max participants must be an integer greater than 0.')
+
+    if (isNaN(feeNum) || feeNum <= 0) {
+      setErrorMessage('Entry fee must be a positive integer greater than 0.')
+      setCreatingMode(false)
+      return
+    }
+    if (isNaN(maxPartNum) || maxPartNum <= 0) {
+      setErrorMessage('Max participants must be a positive integer greater than 0.')
+      setCreatingMode(false)
+      return
+    }
+    if (isNaN(teamSizeNum) || teamSizeNum <= 0) {
+      setErrorMessage('Team size must be a positive integer greater than 0.')
+      setCreatingMode(false)
+      return
+    }
+
+    if (!Array.isArray(modeFormPrizes) || modeFormPrizes.length === 0) {
+      setErrorMessage('At least one prize tier is required.')
       setCreatingMode(false)
       return
     }
@@ -305,12 +327,30 @@ export function OmbView({ initialGameId }: OmbViewProps) {
       })
       const createdId = res?.mode?.id || (res as Record<string, unknown>)?.id || 'OK'
       setSuccessMessage(`OMB Mode "${name}" created successfully (ID: ${createdId}).`)
+      
+      // Reset form fields
       setModeFormName('')
+      setModeFormEntryFee('50')
+      setModeFormMaxParticipants('2')
+      setModeFormTeamSize('1')
+      setModeFormPrizes([{ position: 1, amount: 90 }])
       setModeFormLogoUrl('')
       setShowCreateModeModal(false)
+
       await loadOmbData()
     } catch (err) {
-      setErrorMessage(err instanceof Error ? err.message : 'Failed to create OMB mode')
+      const msg = err instanceof Error ? err.message : String(err)
+      if (
+        msg.includes('409') ||
+        msg.toLowerCase().includes('already exists') ||
+        msg.toLowerCase().includes('duplicate') ||
+        msg.toLowerCase().includes('unique') ||
+        msg.toLowerCase().includes('23505')
+      ) {
+        setErrorMessage('A mode with this name already exists in this game.')
+      } else {
+        setErrorMessage(msg || 'A mode with this name already exists in this game.')
+      }
     } finally {
       setCreatingMode(false)
     }
@@ -338,6 +378,35 @@ export function OmbView({ initialGameId }: OmbViewProps) {
       return
     }
 
+    // Client-side uniqueness check for (gameId, name) on update
+    const isDuplicate = modes.some(
+      (m) =>
+        m.gameId === editingMode.gameId &&
+        m.id !== editingMode.id &&
+        m.name.trim().toLowerCase() === name.toLowerCase()
+    )
+    if (isDuplicate) {
+      setErrorMessage('A mode with this name already exists in this game.')
+      setUpdatingMode(false)
+      return
+    }
+
+    if (isNaN(feeNum) || feeNum <= 0) {
+      setErrorMessage('Entry fee must be a positive integer greater than 0.')
+      setUpdatingMode(false)
+      return
+    }
+    if (isNaN(maxPartNum) || maxPartNum <= 0) {
+      setErrorMessage('Max participants must be a positive integer greater than 0.')
+      setUpdatingMode(false)
+      return
+    }
+    if (isNaN(teamSizeNum) || teamSizeNum <= 0) {
+      setErrorMessage('Team size must be a positive integer greater than 0.')
+      setUpdatingMode(false)
+      return
+    }
+
     const payload = {
       name,
       type: 'omb' as const,
@@ -360,7 +429,18 @@ export function OmbView({ initialGameId }: OmbViewProps) {
       setEditingMode(null)
       await loadOmbData()
     } catch (err) {
-      setErrorMessage(err instanceof Error ? err.message : 'Failed to update OMB mode')
+      const msg = err instanceof Error ? err.message : String(err)
+      if (
+        msg.includes('409') ||
+        msg.toLowerCase().includes('already exists') ||
+        msg.toLowerCase().includes('duplicate') ||
+        msg.toLowerCase().includes('unique') ||
+        msg.toLowerCase().includes('23505')
+      ) {
+        setErrorMessage('A mode with this name already exists in this game.')
+      } else {
+        setErrorMessage(msg || 'Failed to update OMB mode')
+      }
     } finally {
       setUpdatingMode(false)
     }
@@ -402,6 +482,20 @@ export function OmbView({ initialGameId }: OmbViewProps) {
       return
     }
 
+    const resultDeadline = Math.round(Number(scheduleFormResultDeadlineMinutes))
+    if (isNaN(resultDeadline) || resultDeadline <= 0) {
+      setErrorMessage('Result Deadline Minutes must be an integer > 0.')
+      setCreatingSchedule(false)
+      return
+    }
+
+    const managerAlert = Math.round(Number(scheduleFormManagerAlertMinutes))
+    if (isNaN(managerAlert) || managerAlert < 0) {
+      setErrorMessage('Manager Alert Delay must be an integer >= 0.')
+      setCreatingSchedule(false)
+      return
+    }
+
     const payload = {
       modeId: scheduleFormModeId,
       status: scheduleFormStatus,
@@ -409,8 +503,8 @@ export function OmbView({ initialGameId }: OmbViewProps) {
       entryClosesAt: null,
       durationMinutes: null,
       roomRevealMinutesBeforeStart: roomReveal,
-      resultDeadlineMinutes: Math.round(Number(scheduleFormResultDeadlineMinutes)) || 90,
-      managerAlertAfterMinutes: Math.round(Number(scheduleFormManagerAlertMinutes)) || 5,
+      resultDeadlineMinutes: resultDeadline,
+      managerAlertAfterMinutes: managerAlert,
       guideVideoUrl: scheduleFormGuideVideoUrl.trim() || null,
       notes: scheduleFormNotes.trim() || null,
     }
@@ -422,10 +516,17 @@ export function OmbView({ initialGameId }: OmbViewProps) {
       })
       const createdId = res?.schedule?.id || (res as Record<string, unknown>)?.id || 'OK'
       setSuccessMessage(`OMB Schedule slot created successfully for Mode "${targetMode.name}" (ID: ${createdId}).`)
+      
+      // Reset form fields
       setShowCreateScheduleModal(false)
       setScheduleFormStartsAt('')
+      setScheduleFormRoomRevealMinutes('15')
+      setScheduleFormResultDeadlineMinutes('90')
+      setScheduleFormManagerAlertMinutes('5')
       setScheduleFormNotes('')
       setScheduleFormGuideVideoUrl('')
+      setScheduleFormStatus('draft')
+      
       await loadOmbData()
     } catch (err) {
       setErrorMessage(err instanceof Error ? err.message : 'Failed to create OMB schedule slot')
