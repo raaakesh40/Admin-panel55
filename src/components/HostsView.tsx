@@ -16,39 +16,6 @@ import {
   Power,
 } from 'lucide-react'
 
-const DELETED_HOSTS_KEY = 'pagewoga_deleted_host_ids'
-
-function getDeletedHostIds(): string[] {
-  try {
-    const raw = localStorage.getItem(DELETED_HOSTS_KEY)
-    return raw ? (JSON.parse(raw) as string[]) : []
-  } catch {
-    return []
-  }
-}
-
-function addDeletedHostId(id: string) {
-  try {
-    const current = getDeletedHostIds()
-    if (!current.includes(id)) {
-      const updated = [...current, id]
-      localStorage.setItem(DELETED_HOSTS_KEY, JSON.stringify(updated))
-    }
-  } catch {
-    // ignore
-  }
-}
-
-function removeDeletedHostId(id: string) {
-  try {
-    const current = getDeletedHostIds()
-    const updated = current.filter((x) => x !== id)
-    localStorage.setItem(DELETED_HOSTS_KEY, JSON.stringify(updated))
-  } catch {
-    // ignore
-  }
-}
-
 function normalizeHost(raw: unknown): Host {
   if (!raw || typeof raw !== 'object') {
     return {
@@ -62,35 +29,52 @@ function normalizeHost(raw: unknown): Host {
   const obj = raw as Record<string, unknown>
   const user = (obj.user && typeof obj.user === 'object' ? obj.user : {}) as Record<string, unknown>
   const userNested = (obj.User && typeof obj.User === 'object' ? obj.User : {}) as Record<string, unknown>
+  const hostObj = (obj.host && typeof obj.host === 'object' ? obj.host : {}) as Record<string, unknown>
+  const profile = (obj.profile && typeof obj.profile === 'object' ? obj.profile : {}) as Record<string, unknown>
 
-  const id = String(obj.id || obj._id || obj.hostId || obj.userId || user.id || userNested.id || '')
+  const id = String(
+    obj.id ||
+    obj._id ||
+    obj.hostId ||
+    obj.userId ||
+    user.id ||
+    userNested.id ||
+    hostObj.id ||
+    ''
+  )
   
   // Extract Full Name
   const name = String(
     obj.name ||
     user.name ||
     userNested.name ||
+    hostObj.name ||
+    profile.name ||
     obj.fullName ||
     user.fullName ||
     obj.username ||
     user.username ||
     'Host'
-  )
+  ).trim()
 
-  // Extract Username from all possible backend structures
+  // Extract Live Username directly from Server API response
   const rawUsername =
     obj.username ||
     user.username ||
     userNested.username ||
+    hostObj.username ||
+    profile.username ||
     obj.userName ||
     user.userName ||
     obj.user_name ||
     user.user_name ||
     obj.host_username ||
+    obj.hostUsername ||
     user.handle ||
-    obj.handle
+    obj.handle ||
+    obj.slug
 
-  const username = rawUsername ? String(rawUsername).trim() : undefined
+  const username = rawUsername ? String(rawUsername).trim().replace(/^@/, '') : undefined
 
   // Extract Mobile / Phone
   const mobileNumber = String(
@@ -153,11 +137,10 @@ function normalizeHost(raw: unknown): Host {
 
 export function HostsView() {
   const [allFetchedHosts, setAllFetchedHosts] = useState<Host[]>([])
-  const [deletedIds, setDeletedIds] = useState<string[]>(getDeletedHostIds)
   const [loading, setLoading] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const [roleFilter, setRoleFilter] = useState<'all' | 'omb' | 'tournament'>('all')
-  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'disabled' | 'deleted'>('all')
+  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'disabled'>('all')
   const [actionSuccess, setActionSuccess] = useState('')
   const [errorMessage, setErrorMessage] = useState('')
 
@@ -198,7 +181,7 @@ export function HostsView() {
   const [activeDeleteHost, setActiveDeleteHost] = useState<Host | null>(null)
   const [deleteLoading, setDeleteLoading] = useState(false)
 
-  // Fetch Hosts: GET /api/hosts
+  // Fetch Hosts directly from Server: GET /api/hosts or /api/admin/hosts
   async function fetchHosts() {
     setLoading(true)
     setErrorMessage('')
@@ -230,9 +213,8 @@ export function HostsView() {
 
       const list: Host[] = rawList.map(normalizeHost)
       setAllFetchedHosts(list)
-      setDeletedIds(getDeletedHostIds())
     } catch (err) {
-      setErrorMessage(err instanceof Error ? err.message : 'Failed to fetch hosts list.')
+      setErrorMessage(err instanceof Error ? err.message : 'Failed to fetch hosts list from server.')
     } finally {
       setLoading(false)
     }
@@ -269,7 +251,6 @@ export function HostsView() {
           }
           const list: Host[] = rawList.map(normalizeHost)
           setAllFetchedHosts(list)
-          setDeletedIds(getDeletedHostIds())
         }
       } finally {
         if (isMounted) setLoading(false)
@@ -315,7 +296,7 @@ export function HostsView() {
         }),
       })
 
-      setActionSuccess(`Host "${name}" registered successfully.`)
+      setActionSuccess(`Host "${name}" registered on server successfully.`)
       setShowCreateModal(false)
       setCreateName('')
       setCreateUsername('')
@@ -353,7 +334,7 @@ export function HostsView() {
         }),
       })
 
-      setActionSuccess(`Host details updated successfully.`)
+      setActionSuccess(`Host details updated successfully on server.`)
       setShowEditModal(false)
       await fetchHosts()
     } catch (err) {
@@ -375,10 +356,10 @@ export function HostsView() {
         method: 'PATCH',
         body: JSON.stringify({ status: newStatus }),
       })
-      setActionSuccess(`Host "${host.name}" status updated to ${newStatus.toUpperCase()}.`)
+      setActionSuccess(`Host "${host.name}" status updated to ${newStatus.toUpperCase()} on server.`)
       await fetchHosts()
     } catch (err) {
-      setErrorMessage(err instanceof Error ? err.message : 'Failed to toggle status.')
+      setErrorMessage(err instanceof Error ? err.message : 'Failed to toggle status on server.')
     }
   }
 
@@ -394,12 +375,12 @@ export function HostsView() {
       await api(`/admin/hosts/${activePayHost.id}/pay`, {
         method: 'POST',
       })
-      setActionSuccess(`Host payout marked as settled successfully.`)
+      setActionSuccess(`Host payout marked as settled on server.`)
       setShowPayModal(false)
       setActivePayHost(null)
       await fetchHosts()
     } catch (err) {
-      setErrorMessage(err instanceof Error ? err.message : 'Failed to record payout.')
+      setErrorMessage(err instanceof Error ? err.message : 'Failed to record payout on server.')
     } finally {
       setPayLoading(false)
     }
@@ -418,12 +399,12 @@ export function HostsView() {
         method: 'POST',
         body: JSON.stringify({ password: resetPassInput }),
       })
-      setActionSuccess(`Password reset successfully for ${activeResetHost.name}.`)
+      setActionSuccess(`Password reset successfully for ${activeResetHost.name} on server.`)
       setShowResetModal(false)
       setActiveResetHost(null)
       setResetPassInput('')
     } catch (err) {
-      setErrorMessage(err instanceof Error ? err.message : 'Failed to reset password.')
+      setErrorMessage(err instanceof Error ? err.message : 'Failed to reset password on server.')
     } finally {
       setResetLoading(false)
     }
@@ -444,7 +425,6 @@ export function HostsView() {
     setActionSuccess('')
 
     try {
-      // Execute backend endpoint: DELETE /api/admin/hosts/:id
       const res = await api<{ success?: boolean; message?: string; id?: string }>(
         `/admin/hosts/${encodeURIComponent(targetId)}`,
         {
@@ -452,58 +432,25 @@ export function HostsView() {
         }
       )
 
-      // Record ID in deleted/trash store
-      addDeletedHostId(targetId)
-      setDeletedIds(getDeletedHostIds())
-
-      // Purge from active frontend list immediately
-      setAllFetchedHosts((prev) => prev.filter((h) => h.id !== targetId))
-
       const successMsg =
-        res?.message || `Host "${targetName}" deleted and deactivated successfully.`
+        res?.message || `Host "${targetName}" deleted successfully from server.`
       setActionSuccess(successMsg)
       setShowDeleteModal(false)
       setActiveDeleteHost(null)
 
-      // Refresh list to sync state with backend
+      // Refresh live server state
       await fetchHosts()
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Failed to delete host.'
+      const msg = err instanceof Error ? err.message : 'Failed to delete host on server.'
       setErrorMessage(msg)
     } finally {
       setDeleteLoading(false)
     }
   }
 
-  // 7) Restore Host from Deleted (Trash)
-  async function handleRestoreHost(host: Host) {
-    setLoading(true)
-    setErrorMessage('')
-    setActionSuccess('')
-    try {
-      removeDeletedHostId(host.id)
-      setDeletedIds(getDeletedHostIds())
-
-      await api(`/admin/hosts/${encodeURIComponent(host.id)}/status`, {
-        method: 'PATCH',
-        body: JSON.stringify({ status: 'active' }),
-      }).catch(() => {
-        // status patch fallback
-      })
-
-      setActionSuccess(`Host "${host.name}" restored to Active status successfully.`)
-      await fetchHosts()
-    } catch (err) {
-      setErrorMessage(err instanceof Error ? err.message : 'Failed to restore host.')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  // Filter hosts based on search and status/deleted tab
+  // Filter live hosts based on search and status
   const filteredHosts = allFetchedHosts.filter((h) => {
     if (!h || !h.id) return false
-    const isDeleted = deletedIds.includes(h.id) || (h.status || '').toLowerCase() === 'deleted'
     const isActive = (h.status || 'active').toLowerCase() === 'active'
 
     const q = searchQuery.toLowerCase().trim()
@@ -516,13 +463,6 @@ export function HostsView() {
       h.id?.toLowerCase().includes(q)
 
     if (!matchesQuery) return false
-
-    if (statusFilter === 'deleted') {
-      return isDeleted
-    }
-
-    // For all, active, disabled: ignore deleted hosts completely
-    if (isDeleted) return false
 
     if (statusFilter === 'active') {
       return isActive
@@ -540,7 +480,7 @@ export function HostsView() {
       <div className="view-header">
         <div>
           <h2>Hosts Management</h2>
-          <p>Manage room host accounts, match assignments, settlements, and credentials</p>
+          <p>Manage live room host accounts, match assignments, settlements, and credentials directly on the server</p>
         </div>
         <div className="header-actions">
           <button className="primary small-btn" onClick={() => setShowCreateModal(true)}>
@@ -554,7 +494,7 @@ export function HostsView() {
           <Search size={16} className="search-icon" />
           <input
             type="text"
-            placeholder="Search host by name, phone, UPI or ID..."
+            placeholder="Search host by name, username, phone, UPI or ID..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
           />
@@ -572,19 +512,18 @@ export function HostsView() {
 
           <select
             value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value as 'all' | 'active' | 'disabled' | 'deleted')}
+            onChange={(e) => setStatusFilter(e.target.value as 'all' | 'active' | 'disabled')}
           >
             <option value="all">All Status</option>
             <option value="active">Active Only</option>
             <option value="disabled">Disabled Only</option>
-            <option value="deleted">Deleted Hosts (Trash)</option>
           </select>
 
           <button
             className="secondary small-btn icon-only"
             onClick={fetchHosts}
             disabled={loading}
-            title="Refresh hosts list"
+            title="Refresh hosts list from live server"
           >
             <RefreshCw size={14} className={loading ? 'spinning' : ''} />
           </button>
@@ -608,30 +547,24 @@ export function HostsView() {
       {loading ? (
         <div className="loading-card">
           <RefreshCw size={24} className="spinning" color="#aa3bff" />
-          <p>Loading verified host accounts...</p>
+          <p>Loading live host accounts from server...</p>
         </div>
       ) : filteredHosts.length === 0 ? (
         <div className="state-card">
           <div className="state-icon">
             <Shield size={32} color="#aa3bff" />
           </div>
-          <h3>{statusFilter === 'deleted' ? 'No Deleted Hosts' : 'No Hosts Found'}</h3>
+          <h3>No Hosts Found</h3>
           <p className="state-desc">
-            {statusFilter === 'deleted'
-              ? 'No host accounts are currently in the deleted trash.'
-              : 'No hosts matched your query. Click below to add a new verified room host.'}
+            No live hosts matched your query. Click below to add a new verified room host.
           </p>
-          {statusFilter !== 'deleted' && (
-            <button className="primary small-btn" onClick={() => setShowCreateModal(true)}>
-              <Plus size={14} /> Add First Host
-            </button>
-          )}
+          <button className="primary small-btn" onClick={() => setShowCreateModal(true)}>
+            <Plus size={14} /> Add First Host
+          </button>
         </div>
       ) : (
         <div className="hosts-grid">
           {filteredHosts.map((h) => {
-            const isHostDeleted =
-              deletedIds.includes(h.id) || (h.status || '').toLowerCase() === 'deleted'
             const isActive = (h.status || 'active').toLowerCase() === 'active'
             return (
               <article key={h.id} className="host-card">
@@ -643,16 +576,20 @@ export function HostsView() {
                     <div className="host-title-details">
                       <div className="host-name-row">
                         <h4>{h.name}</h4>
-                        {h.username && (
-                          <span className="host-handle-badge" title={`Host Username: @${h.username}`}>
-                            @{h.username.replace(/^@/, '')}
+                        {h.username ? (
+                          <span className="host-handle-badge" title={`Server Host Username: @${h.username}`}>
+                            @{h.username}
+                          </span>
+                        ) : (
+                          <span className="host-handle-badge muted" title="No username assigned on server" style={{ opacity: 0.6 }}>
+                            @—
                           </span>
                         )}
                       </div>
                       <p className="host-sub">
                         {h.username && (
                           <>
-                            <span className="mono-code text-purple">@{h.username.replace(/^@/, '')}</span>
+                            <span className="mono-code text-purple">@{h.username}</span>
                             <span>•</span>
                           </>
                         )}
@@ -662,13 +599,8 @@ export function HostsView() {
                       </p>
                     </div>
                   </div>
-                  <span
-                    className={`status-pill ${
-                      isHostDeleted ? 'suspended' : isActive ? 'active' : 'suspended'
-                    }`}
-                    style={isHostDeleted ? { borderColor: 'var(--coral-color)', color: 'var(--coral-color)' } : {}}
-                  >
-                    {isHostDeleted ? 'DELETED' : isActive ? 'ACTIVE' : 'DISABLED'}
+                  <span className={`status-pill ${isActive ? 'active' : 'suspended'}`}>
+                    {isActive ? 'ACTIVE' : 'DISABLED'}
                   </span>
                 </div>
 
@@ -676,8 +608,8 @@ export function HostsView() {
                   <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
                     <span className="badge-tag">{(h.role || 'omb').toUpperCase()} HOST</span>
                     {h.username && (
-                      <span className="host-id-chip" title="Host Username">
-                        User: <strong>@{h.username.replace(/^@/, '')}</strong>
+                      <span className="host-id-chip" title="Server Username">
+                        User: <strong>@{h.username}</strong>
                       </span>
                     )}
                   </div>
@@ -696,80 +628,68 @@ export function HostsView() {
                 </div>
 
                 <div className="host-card-actions">
-                  {isHostDeleted ? (
-                    <button
-                      className="success small-btn"
-                      onClick={() => handleRestoreHost(h)}
-                      title="Restore host account back to Active"
-                    >
-                      <CheckCircle2 size={13} /> Restore Host
-                    </button>
-                  ) : (
-                    <>
-                      <button
-                        className="secondary small-btn"
-                        onClick={() => {
-                          setEditHostId(h.id)
-                          setEditName(h.name || '')
-                          setEditUsername(h.username || '')
-                          setEditMobile(h.mobileNumber || '')
-                          setEditUpiId(h.upiId || '')
-                          setEditRole((h.role === 'tournament' ? 'tournament' : 'omb'))
-                          setEditStatus(isActive ? 'active' : 'disabled')
-                          setShowEditModal(true)
-                        }}
-                        title="Edit host details"
-                      >
-                        <Edit2 size={13} /> Edit
-                      </button>
+                  <button
+                    className="secondary small-btn"
+                    onClick={() => {
+                      setEditHostId(h.id)
+                      setEditName(h.name || '')
+                      setEditUsername(h.username || '')
+                      setEditMobile(h.mobileNumber || '')
+                      setEditUpiId(h.upiId || '')
+                      setEditRole((h.role === 'tournament' ? 'tournament' : 'omb'))
+                      setEditStatus(isActive ? 'active' : 'disabled')
+                      setShowEditModal(true)
+                    }}
+                    title="Edit host details"
+                  >
+                    <Edit2 size={13} /> Edit
+                  </button>
 
-                      <button
-                        className="secondary small-btn"
-                        onClick={() => {
-                          setActiveResetHost(h)
-                          setShowResetModal(true)
-                        }}
-                        title="Reset host password"
-                      >
-                        <Key size={13} /> Password
-                      </button>
+                  <button
+                    className="secondary small-btn"
+                    onClick={() => {
+                      setActiveResetHost(h)
+                      setShowResetModal(true)
+                    }}
+                    title="Reset host password on server"
+                  >
+                    <Key size={13} /> Password
+                  </button>
 
-                      <button
-                        className="success small-btn"
-                        onClick={() => {
-                          setActivePayHost(h)
-                          setShowPayModal(true)
-                        }}
-                        title="Settle unpaid commission"
-                      >
-                        <CreditCard size={13} /> Settle
-                      </button>
+                  <button
+                    className="success small-btn"
+                    onClick={() => {
+                      setActivePayHost(h)
+                      setShowPayModal(true)
+                    }}
+                    title="Settle unpaid commission"
+                  >
+                    <CreditCard size={13} /> Settle
+                  </button>
 
-                      <button
-                        className={`${isActive ? 'warning' : 'success'} small-btn`}
-                        onClick={() => handleToggleStatus(h)}
-                        title={isActive ? 'Disable / Suspend host account' : 'Enable host account'}
-                      >
-                        {isActive ? (
-                          <>
-                            <Power size={13} /> Disable
-                          </>
-                        ) : (
-                          <>
-                            <CheckCircle2 size={13} /> Enable
-                          </>
-                        )}
-                      </button>
+                  <button
+                    className={`${isActive ? 'warning' : 'success'} small-btn`}
+                    onClick={() => handleToggleStatus(h)}
+                    title={isActive ? 'Disable / Suspend host account' : 'Enable host account'}
+                  >
+                    {isActive ? (
+                      <>
+                        <Power size={13} /> Disable
+                      </>
+                    ) : (
+                      <>
+                        <CheckCircle2 size={13} /> Enable
+                      </>
+                    )}
+                  </button>
 
-                      <button
-                        className="danger small-btn"
-                        onClick={() => promptDeleteHost(h)}
-                        title="Delete host account permanently"
-                      >
-                        <Trash2 size={13} /> Delete
-                      </button>
-                    </>
-                  )}
+                  <button
+                    className="danger small-btn"
+                    onClick={() => promptDeleteHost(h)}
+                    title="Delete host account permanently from server"
+                  >
+                    <Trash2 size={13} /> Delete
+                  </button>
                 </div>
               </article>
             )
@@ -803,7 +723,7 @@ export function HostsView() {
                 Username (Host Handle)
                 <input
                   type="text"
-                  placeholder="e.g. rahul_host or rahul99"
+                  placeholder="e.g. rahul_host"
                   value={createUsername}
                   onChange={(e) => setCreateUsername(e.target.value)}
                 />
@@ -954,7 +874,7 @@ export function HostsView() {
                       promptDeleteHost(h)
                     }
                   }}
-                  title="Delete this host permanently"
+                  title="Delete this host permanently from server"
                 >
                   <Trash2 size={13} /> Delete Host
                 </button>
@@ -989,7 +909,7 @@ export function HostsView() {
             </div>
             <form onSubmit={handleSettlePayment} className="modal-form">
               <p>
-                Confirm settling host payout balance for this billing period:
+                Confirm settling host payout balance for this billing period directly on server:
               </p>
               <div className="info-summary-box">
                 <div>
@@ -1035,7 +955,7 @@ export function HostsView() {
             </div>
             <form onSubmit={handleResetPassword} className="modal-form">
               <p>
-                Set a new access password for{' '}
+                Set a new access password on server for{' '}
                 <strong>
                   {activeResetHost.name}
                   {activeResetHost.username ? ` (@${activeResetHost.username})` : ''}
@@ -1088,16 +1008,16 @@ export function HostsView() {
               <div className="alert-box error">
                 <AlertCircle size={18} />
                 <span>
-                  Are you sure you want to delete host{' '}
+                  Are you sure you want to permanently delete host{' '}
                   <strong>
                     &quot;{activeDeleteHost.name}&quot;
                     {activeDeleteHost.username ? ` (@${activeDeleteHost.username})` : ''}
-                  </strong>
-                  ?
+                  </strong>{' '}
+                  from the server?
                 </span>
               </div>
               <p style={{ fontSize: '13px', color: 'var(--text-muted)' }}>
-                This will deactivate the host credentials and remove them from active room hosting assignments.
+                This will execute the live server deletion endpoint and revoke their credentials.
               </p>
 
               <div className="modal-actions">
@@ -1117,7 +1037,7 @@ export function HostsView() {
                   onClick={handleDeleteHost}
                   disabled={deleteLoading}
                 >
-                  {deleteLoading ? 'Deleting...' : 'Delete Host'}
+                  {deleteLoading ? 'Deleting on Server...' : 'Delete Host'}
                 </button>
               </div>
             </div>
@@ -1127,3 +1047,4 @@ export function HostsView() {
     </div>
   )
 }
+
