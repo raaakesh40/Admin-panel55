@@ -153,9 +153,12 @@ export async function api<T>(path: string, options?: RequestInit): Promise<T> {
   }
 
   const requestHeaders: Record<string, string> = {
-    'Content-Type': 'application/json',
     ...authHeaders,
     ...customHeaders,
+  }
+
+  if (options?.body && !requestHeaders['Content-Type'] && !requestHeaders['content-type']) {
+    requestHeaders['Content-Type'] = 'application/json'
   }
 
   // Ensure authorization header is always present if token exists
@@ -219,17 +222,25 @@ export async function api<T>(path: string, options?: RequestInit): Promise<T> {
   }
 
   if (!response.ok) {
-    const errData = await response.json().catch(() => null)
+    let errData: Record<string, unknown> | null = null
+    try {
+      const errText = await response.text()
+      if (errText) {
+        errData = JSON.parse(errText) as Record<string, unknown>
+      }
+    } catch {
+      // ignore parse error
+    }
     let errorMessage =
-      errData?.message ||
-      errData?.error ||
-      errData?.detail ||
-      errData?.details ||
-      errData?.msg
+      (errData?.message as string | undefined) ||
+      (errData?.error as string | undefined) ||
+      (errData?.detail as string | undefined) ||
+      (errData?.details as string | undefined) ||
+      (errData?.msg as string | undefined)
     
     if (!errorMessage && Array.isArray(errData?.errors)) {
-      errorMessage = errData.errors
-        .map((item: { path?: string[]; message?: string; field?: string } | string) =>
+      errorMessage = (errData.errors as Array<{ path?: string[]; message?: string; field?: string } | string>)
+        .map((item) =>
           typeof item === 'string'
             ? item
             : `${item.path?.join('.') || item.field || 'Field'}: ${item.message || 'Invalid value'}`
@@ -252,11 +263,13 @@ export async function api<T>(path: string, options?: RequestInit): Promise<T> {
 
     if (!errorMessage) {
       if (response.status === 409) {
-        errorMessage = 'A mode with this name already exists in this game.'
+        errorMessage = 'Conflict: Record already exists or linked to other data.'
       } else if (response.status === 400) {
         errorMessage = 'Invalid request parameters submitted.'
       } else if (response.status === 401 || response.status === 403) {
-        errorMessage = 'Authentication / permission error.'
+        errorMessage = 'Admin permissions required. Please verify your admin credentials.'
+      } else if (response.status === 404) {
+        errorMessage = 'The requested resource was not found.'
       } else {
         errorMessage = `Request failed (${response.status})`
       }
@@ -280,11 +293,20 @@ export async function api<T>(path: string, options?: RequestInit): Promise<T> {
     return undefined as T
   }
 
-  const data = await response.json()
+  let data: Record<string, unknown> = {}
+  try {
+    const text = await response.text()
+    if (text && text.trim().length > 0) {
+      data = JSON.parse(text) as Record<string, unknown>
+    }
+  } catch {
+    data = {}
+  }
+
   const discoveredToken = findTokenInObject(data)
   if (discoveredToken) {
     saveToken(discoveredToken)
   }
 
-  return data
+  return data as unknown as T
 }

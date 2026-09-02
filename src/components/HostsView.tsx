@@ -299,7 +299,7 @@ export function HostsView() {
     }
   }
 
-  // 6) Delete Host Permanently
+  // 6) Delete / Deactivate Host
   function promptDeleteHost(h: Host) {
     setActiveDeleteHost(h)
     setShowDeleteModal(true)
@@ -314,37 +314,32 @@ export function HostsView() {
     setActionSuccess('')
 
     try {
-      // Execute backend DELETE endpoint: DELETE /api/admin/hosts/:id
-      try {
-        await api(`/admin/hosts/${targetId}`, {
+      // Execute backend endpoint: DELETE /api/admin/hosts/:id
+      const res = await api<{ success?: boolean; message?: string; id?: string }>(
+        `/admin/hosts/${encodeURIComponent(targetId)}`,
+        {
           method: 'DELETE',
-        })
-      } catch (callErr) {
-        try {
-          await api(`/hosts/${targetId}`, {
-            method: 'DELETE',
-          })
-        } catch {
-          // Backend soft-delete or error fallback
-          console.warn('DELETE host fallback notice:', callErr)
         }
-      }
+      )
 
-      // Record ID permanently in deletedIds store
+      // Record ID in deleted/trash store
       addDeletedHostId(targetId)
       setDeletedIds(getDeletedHostIds())
 
-      // Immediately purge from frontend display
+      // Purge from active frontend list immediately
       setAllFetchedHosts((prev) => prev.filter((h) => h.id !== targetId))
 
-      setActionSuccess(`Host account "${targetName}" has been permanently deleted.`)
+      const successMsg =
+        res?.message || `Host "${targetName}" deleted and deactivated successfully.`
+      setActionSuccess(successMsg)
       setShowDeleteModal(false)
       setActiveDeleteHost(null)
-      
-      // Sync list
+
+      // Refresh list to sync state with backend
       await fetchHosts()
     } catch (err) {
-      setErrorMessage(err instanceof Error ? err.message : 'Failed to delete host account.')
+      const msg = err instanceof Error ? err.message : 'Failed to delete host.'
+      setErrorMessage(msg)
     } finally {
       setDeleteLoading(false)
     }
@@ -359,16 +354,14 @@ export function HostsView() {
       removeDeletedHostId(host.id)
       setDeletedIds(getDeletedHostIds())
 
-      try {
-        await api(`/admin/hosts/${host.id}/status`, {
-          method: 'PATCH',
-          body: JSON.stringify({ status: 'active' }),
-        })
-      } catch {
+      await api(`/admin/hosts/${encodeURIComponent(host.id)}/status`, {
+        method: 'PATCH',
+        body: JSON.stringify({ status: 'active' }),
+      }).catch(() => {
         // status patch fallback
-      }
+      })
 
-      setActionSuccess(`Host "${host.name}" has been restored to Active status.`)
+      setActionSuccess(`Host "${host.name}" restored to Active status successfully.`)
       await fetchHosts()
     } catch (err) {
       setErrorMessage(err instanceof Error ? err.message : 'Failed to restore host.')
