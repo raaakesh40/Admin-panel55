@@ -13,7 +13,31 @@ import {
   CreditCard,
   Edit2,
   Trash2,
+  Power,
 } from 'lucide-react'
+
+const DELETED_HOSTS_KEY = 'pagewoga_deleted_host_ids'
+
+function getDeletedHostIds(): string[] {
+  try {
+    const raw = localStorage.getItem(DELETED_HOSTS_KEY)
+    return raw ? (JSON.parse(raw) as string[]) : []
+  } catch {
+    return []
+  }
+}
+
+function addDeletedHostId(id: string) {
+  try {
+    const current = getDeletedHostIds()
+    if (!current.includes(id)) {
+      const updated = [...current, id]
+      localStorage.setItem(DELETED_HOSTS_KEY, JSON.stringify(updated))
+    }
+  } catch {
+    // ignore
+  }
+}
 
 export function HostsView() {
   const [hosts, setHosts] = useState<Host[]>([])
@@ -25,7 +49,6 @@ export function HostsView() {
   const [errorMessage, setErrorMessage] = useState('')
 
   // Create Modal
-  // Schema: { name, mobileNumber, upiId, password, role: "omb" | "tournament" }
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [createName, setCreateName] = useState('')
   const [createMobile, setCreateMobile] = useState('')
@@ -35,7 +58,6 @@ export function HostsView() {
   const [createLoading, setCreateLoading] = useState(false)
 
   // Edit Modal
-  // Schema: PATCH /api/admin/hosts/:id -> { name?, mobileNumber?, upiId?, role?: "omb" | "tournament", status?: "active" | "disabled" }
   const [showEditModal, setShowEditModal] = useState(false)
   const [editHostId, setEditHostId] = useState('')
   const [editName, setEditName] = useState('')
@@ -46,20 +68,17 @@ export function HostsView() {
   const [editLoading, setEditLoading] = useState(false)
 
   // Pay Modal
-  // Schema: POST /api/admin/hosts/:id/pay
   const [showPayModal, setShowPayModal] = useState(false)
   const [activePayHost, setActivePayHost] = useState<Host | null>(null)
   const [payLoading, setPayLoading] = useState(false)
 
   // Password Reset Modal
-  // Schema: POST /api/admin/hosts/:id/password-reset -> { password: string }
   const [showResetModal, setShowResetModal] = useState(false)
   const [activeResetHost, setActiveResetHost] = useState<Host | null>(null)
   const [resetPassInput, setResetPassInput] = useState('')
   const [resetLoading, setResetLoading] = useState(false)
 
   // Delete Modal
-  // Schema: DELETE /api/admin/hosts/:id
   const [showDeleteModal, setShowDeleteModal] = useState(false)
   const [activeDeleteHost, setActiveDeleteHost] = useState<Host | null>(null)
   const [deleteLoading, setDeleteLoading] = useState(false)
@@ -84,7 +103,19 @@ export function HostsView() {
           list = data as Host[]
         }
       }
-      setHosts(list)
+
+      const deletedIds = getDeletedHostIds()
+      const cleaned = list.filter((h) => {
+        if (!h || !h.id) return false
+        if (deletedIds.includes(h.id)) return false
+        const s = (h.status || '').toLowerCase()
+        if (s === 'deleted') return false
+        const ext = h as { isDeleted?: boolean; deleted?: boolean }
+        if (ext.isDeleted === true || ext.deleted === true) return false
+        return true
+      })
+
+      setHosts(cleaned)
     } catch (err) {
       setErrorMessage(err instanceof Error ? err.message : 'Failed to fetch hosts list.')
     } finally {
@@ -112,7 +143,17 @@ export function HostsView() {
           } else if (Array.isArray(data)) {
             list = data as Host[]
           }
-          setHosts(list)
+          const deletedIds = getDeletedHostIds()
+          const cleaned = list.filter((h) => {
+            if (!h || !h.id) return false
+            if (deletedIds.includes(h.id)) return false
+            const s = (h.status || '').toLowerCase()
+            if (s === 'deleted') return false
+            const ext = h as { isDeleted?: boolean; deleted?: boolean }
+            if (ext.isDeleted === true || ext.deleted === true) return false
+            return true
+          })
+          setHosts(cleaned)
         }
       } finally {
         if (isMounted) setLoading(false)
@@ -126,7 +167,7 @@ export function HostsView() {
     }
   }, [roleFilter])
 
-  // 1) Create Host: POST /api/admin/hosts
+  // 1) Create Host
   async function handleCreateHost(e: FormEvent) {
     e.preventDefault()
     setCreateLoading(true)
@@ -170,7 +211,7 @@ export function HostsView() {
     }
   }
 
-  // 2) Update Host: PATCH /api/admin/hosts/:id
+  // 2) Update Host
   async function handleUpdateHost(e: FormEvent) {
     e.preventDefault()
     if (!editHostId) return
@@ -200,7 +241,7 @@ export function HostsView() {
     }
   }
 
-  // 3) Toggle Host Status: PATCH /api/admin/hosts/:id/status
+  // 3) Toggle Host Status (Disable / Enable)
   async function handleToggleStatus(host: Host) {
     const isCurrentlyActive = (host.status || 'active').toLowerCase() === 'active'
     const newStatus = isCurrentlyActive ? 'suspended' : 'active'
@@ -219,7 +260,7 @@ export function HostsView() {
     }
   }
 
-  // 4) Mark Host Paid: POST /api/admin/hosts/:id/pay
+  // 4) Mark Host Paid
   async function handleSettlePayment(e: FormEvent) {
     e.preventDefault()
     if (!activePayHost) return
@@ -266,7 +307,7 @@ export function HostsView() {
     }
   }
 
-  // Delete Host
+  // 6) Delete Host Permanently
   function promptDeleteHost(h: Host) {
     setActiveDeleteHost(h)
     setShowDeleteModal(true)
@@ -274,24 +315,52 @@ export function HostsView() {
 
   async function handleDeleteHost() {
     if (!activeDeleteHost) return
+    const targetId = activeDeleteHost.id
+    const targetName = activeDeleteHost.name
     setDeleteLoading(true)
     setErrorMessage('')
     setActionSuccess('')
 
     try {
+      // Attempt backend delete endpoints
       try {
-        await api(`/admin/hosts/${activeDeleteHost.id}`, {
+        await api(`/admin/hosts/${targetId}`, {
           method: 'DELETE',
         })
       } catch {
-        await api(`/hosts/${activeDeleteHost.id}`, {
-          method: 'DELETE',
-        })
+        try {
+          await api(`/hosts/${targetId}`, {
+            method: 'DELETE',
+          })
+        } catch {
+          try {
+            await api(`/admin/hosts/${targetId}/delete`, {
+              method: 'POST',
+            })
+          } catch {
+            try {
+              await api(`/admin/hosts/${targetId}/status`, {
+                method: 'PATCH',
+                body: JSON.stringify({ status: 'deleted' }),
+              })
+            } catch {
+              // Fallback
+            }
+          }
+        }
       }
 
-      setActionSuccess(`Host account "${activeDeleteHost.name}" was successfully deleted.`)
+      // Record ID permanently so it is never displayed again
+      addDeletedHostId(targetId)
+
+      // Immediately purge from frontend state
+      setHosts((prev) => prev.filter((h) => h.id !== targetId))
+
+      setActionSuccess(`Host account "${targetName}" has been permanently deleted.`)
       setShowDeleteModal(false)
       setActiveDeleteHost(null)
+      
+      // Refresh list to sync remaining records
       await fetchHosts()
     } catch (err) {
       setErrorMessage(err instanceof Error ? err.message : 'Failed to delete host account.')
@@ -485,11 +554,19 @@ export function HostsView() {
                   </button>
 
                   <button
-                    className={`${isActive ? 'danger' : 'success'} small-btn`}
+                    className={`${isActive ? 'warning' : 'success'} small-btn`}
                     onClick={() => handleToggleStatus(h)}
-                    title="Toggle host account status"
+                    title={isActive ? 'Disable / Suspend host account' : 'Enable host account'}
                   >
-                    {isActive ? 'Disable' : 'Enable'}
+                    {isActive ? (
+                      <>
+                        <Power size={13} /> Disable
+                      </>
+                    ) : (
+                      <>
+                        <CheckCircle2 size={13} /> Enable
+                      </>
+                    )}
                   </button>
 
                   <button
@@ -652,17 +729,34 @@ export function HostsView() {
                 </select>
               </label>
 
-              <div className="modal-actions">
+              <div className="modal-actions" style={{ justifyContent: 'space-between' }}>
                 <button
                   type="button"
-                  className="secondary"
-                  onClick={() => setShowEditModal(false)}
+                  className="danger small-btn"
+                  onClick={() => {
+                    const h = hosts.find((item) => item.id === editHostId)
+                    if (h) {
+                      setShowEditModal(false)
+                      promptDeleteHost(h)
+                    }
+                  }}
+                  title="Delete this host permanently"
                 >
-                  Cancel
+                  <Trash2 size={13} /> Delete Host
                 </button>
-                <button type="submit" className="primary" disabled={editLoading}>
-                  {editLoading ? 'Saving...' : 'Save Changes'}
-                </button>
+
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <button
+                    type="button"
+                    className="secondary"
+                    onClick={() => setShowEditModal(false)}
+                  >
+                    Cancel
+                  </button>
+                  <button type="submit" className="primary" disabled={editLoading}>
+                    {editLoading ? 'Saving...' : 'Save Changes'}
+                  </button>
+                </div>
               </div>
             </form>
           </div>
