@@ -15,6 +15,7 @@ import {
   Edit2,
   ChevronRight,
   Gamepad2,
+  Trash2,
 } from 'lucide-react'
 
 interface OmbViewProps {
@@ -40,6 +41,15 @@ export function OmbView({ initialGameId }: OmbViewProps) {
   const [showEditModeModal, setShowEditModeModal] = useState(false)
   const [editingMode, setEditingMode] = useState<GameMode | null>(null)
   const [showCreateScheduleModal, setShowCreateScheduleModal] = useState(false)
+
+  // Delete State
+  const [modeToDelete, setModeToDelete] = useState<GameMode | null>(null)
+  const [showDeleteModeModal, setShowDeleteModeModal] = useState(false)
+  const [deletingMode, setDeletingMode] = useState(false)
+
+  const [scheduleToDelete, setScheduleToDelete] = useState<CompetitionSchedule | null>(null)
+  const [showDeleteScheduleModal, setShowDeleteScheduleModal] = useState(false)
+  const [deletingSchedule, setDeletingSchedule] = useState(false)
 
   // OMB Mode Form State (Config Only - NEVER timing!)
   const [modeFormGameId, setModeFormGameId] = useState('')
@@ -595,6 +605,96 @@ export function OmbView({ initialGameId }: OmbViewProps) {
     }
   }
 
+  // ====================================================
+  // DELETE OMB MODE: DELETE /api/admin/competition/modes/:id
+  // ====================================================
+  function promptDeleteMode(m: GameMode) {
+    setModeToDelete(m)
+    setShowDeleteModeModal(true)
+  }
+
+  async function handleDeleteMode() {
+    if (!modeToDelete) return
+    setDeletingMode(true)
+    setErrorMessage('')
+    setSuccessMessage('')
+
+    try {
+      try {
+        await api(`/admin/competition/modes/${modeToDelete.id}`, {
+          method: 'DELETE',
+        })
+      } catch {
+        await api(`/competitions/modes/${modeToDelete.id}`, {
+          method: 'DELETE',
+        })
+      }
+
+      setSuccessMessage(`OMB Mode "${modeToDelete.name}" deleted successfully.`)
+      setShowDeleteModeModal(false)
+      setShowEditModeModal(false)
+      if (selectedModeId === modeToDelete.id) {
+        setSelectedModeId('')
+      }
+      setModeToDelete(null)
+      await loadOmbData()
+    } catch (err) {
+      setErrorMessage(
+        err instanceof Error
+          ? err.message
+          : `Failed to delete OMB Mode "${modeToDelete.name}". It may have active match schedules.`
+      )
+    } finally {
+      setDeletingMode(false)
+    }
+  }
+
+  // ====================================================
+  // DELETE OMB SCHEDULE: DELETE /api/admin/competition/schedules/:id
+  // ====================================================
+  function promptDeleteSchedule(s: CompetitionSchedule) {
+    setScheduleToDelete(s)
+    setShowDeleteScheduleModal(true)
+  }
+
+  async function handleDeleteSchedule() {
+    if (!scheduleToDelete) return
+    setDeletingSchedule(true)
+    setErrorMessage('')
+    setSuccessMessage('')
+
+    try {
+      try {
+        await api(`/admin/competition/schedules/${scheduleToDelete.id}`, {
+          method: 'DELETE',
+        })
+      } catch {
+        try {
+          await api(`/competitions/schedules/${scheduleToDelete.id}`, {
+            method: 'DELETE',
+          })
+        } catch {
+          await api(`/admin/competition/modes/${scheduleToDelete.modeId}/schedules/${scheduleToDelete.id}`, {
+            method: 'DELETE',
+          })
+        }
+      }
+
+      setSuccessMessage(`OMB Schedule slot deleted successfully.`)
+      setShowDeleteScheduleModal(false)
+      setScheduleToDelete(null)
+      await loadOmbData()
+    } catch (err) {
+      setErrorMessage(
+        err instanceof Error
+          ? err.message
+          : `Failed to delete OMB Schedule slot.`
+      )
+    } finally {
+      setDeletingSchedule(false)
+    }
+  }
+
   const selectedGame = selectedGameId ? gameMap.get(selectedGameId) : null
   const selectedMode = selectedModeId ? modeMap.get(selectedModeId) : null
 
@@ -794,13 +894,22 @@ export function OmbView({ initialGameId }: OmbViewProps) {
                         {m.isActive !== false ? 'ACTIVE' : 'INACTIVE'}
                       </span>
                     </div>
-                    <button
-                      className="icon-btn edit-mode-btn"
-                      onClick={() => openEditMode(m)}
-                      title="Edit Mode Configuration"
-                    >
-                      <Edit2 size={13} />
-                    </button>
+                    <div className="card-action-icons">
+                      <button
+                        className="icon-btn edit-mode-btn"
+                        onClick={() => openEditMode(m)}
+                        title="Edit Mode Configuration"
+                      >
+                        <Edit2 size={13} />
+                      </button>
+                      <button
+                        className="icon-delete-btn"
+                        onClick={() => promptDeleteMode(m)}
+                        title="Delete OMB Mode"
+                      >
+                        <Trash2 size={13} />
+                      </button>
+                    </div>
                   </div>
 
                   <div className="mode-title-row">
@@ -982,7 +1091,16 @@ export function OmbView({ initialGameId }: OmbViewProps) {
                         {(item.status || 'draft').toUpperCase()}
                       </span>
                     </div>
-                    <span className="schedule-id-chip">ID: {item.id.slice(0, 8)}</span>
+                    <div className="card-action-icons">
+                      <span className="schedule-id-chip">ID: {item.id.slice(0, 8)}</span>
+                      <button
+                        className="icon-delete-btn"
+                        onClick={() => promptDeleteSchedule(item)}
+                        title="Delete Schedule Slot"
+                      >
+                        <Trash2 size={13} />
+                      </button>
+                    </div>
                   </div>
 
                   <div className="schedule-mode-context">
@@ -1316,21 +1434,37 @@ export function OmbView({ initialGameId }: OmbViewProps) {
                 </div>
               </div>
 
-              <div className="modal-actions">
+              <div className="modal-actions-spaced">
                 <button
                   type="button"
-                  className="secondary small-btn"
-                  onClick={() => setShowEditModeModal(false)}
+                  className="danger small-btn"
+                  onClick={() => {
+                    if (editingMode) {
+                      setShowEditModeModal(false)
+                      promptDeleteMode(editingMode)
+                    }
+                  }}
+                  title="Delete this OMB mode permanently"
                 >
-                  Cancel
+                  <Trash2 size={13} /> Delete Mode
                 </button>
-                <button
-                  type="submit"
-                  className="primary small-btn omb-primary-btn"
-                  disabled={updatingMode}
-                >
-                  {updatingMode ? 'Saving...' : 'Update Mode'}
-                </button>
+
+                <div className="modal-actions-right">
+                  <button
+                    type="button"
+                    className="secondary small-btn"
+                    onClick={() => setShowEditModeModal(false)}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="primary small-btn omb-primary-btn"
+                    disabled={updatingMode}
+                  >
+                    {updatingMode ? 'Saving...' : 'Update Mode'}
+                  </button>
+                </div>
               </div>
             </form>
           </div>
@@ -1479,6 +1613,114 @@ export function OmbView({ initialGameId }: OmbViewProps) {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* ======================================================== */}
+      {/* MODAL: DELETE OMB MODE CONFIRMATION                      */}
+      {/* ======================================================== */}
+      {showDeleteModeModal && modeToDelete && (
+        <div className="modal-overlay" onClick={() => !deletingMode && setShowDeleteModeModal(false)}>
+          <div className="modal-content modal-confirm" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <div className="modal-title-wrap">
+                <Trash2 size={20} color="var(--coral-color)" />
+                <h3 style={{ color: 'var(--coral-color)' }}>Delete OMB Mode: {modeToDelete.name}?</h3>
+              </div>
+              <button
+                className="close-btn"
+                onClick={() => !deletingMode && setShowDeleteModeModal(false)}
+                disabled={deletingMode}
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="modal-confirm-body">
+              <p>
+                Are you sure you want to permanently delete OMB mode <strong>{modeToDelete.name}</strong> (ID: <code>{modeToDelete.id}</code>)?
+              </p>
+              <div className="alert-box error" style={{ margin: '12px 0 16px' }}>
+                <AlertCircle size={15} />
+                <span>
+                  This calls <code>DELETE /api/admin/competition/modes/{modeToDelete.id}</code>. Any active match schedule slots tied to this mode will also be removed.
+                </span>
+              </div>
+            </div>
+
+            <div className="modal-actions">
+              <button
+                type="button"
+                className="secondary small-btn"
+                onClick={() => setShowDeleteModeModal(false)}
+                disabled={deletingMode}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="danger small-btn"
+                onClick={handleDeleteMode}
+                disabled={deletingMode}
+              >
+                {deletingMode ? 'Deleting...' : 'Yes, Delete Mode'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ======================================================== */}
+      {/* MODAL: DELETE OMB SCHEDULE CONFIRMATION                  */}
+      {/* ======================================================== */}
+      {showDeleteScheduleModal && scheduleToDelete && (
+        <div className="modal-overlay" onClick={() => !deletingSchedule && setShowDeleteScheduleModal(false)}>
+          <div className="modal-content modal-confirm" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <div className="modal-title-wrap">
+                <Trash2 size={20} color="var(--coral-color)" />
+                <h3 style={{ color: 'var(--coral-color)' }}>Delete OMB Schedule Slot?</h3>
+              </div>
+              <button
+                className="close-btn"
+                onClick={() => !deletingSchedule && setShowDeleteScheduleModal(false)}
+                disabled={deletingSchedule}
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="modal-confirm-body">
+              <p>
+                Are you sure you want to delete this OMB match slot (ID: <code>{scheduleToDelete.id}</code>)?
+              </p>
+              <div className="alert-box error" style={{ margin: '12px 0 16px' }}>
+                <AlertCircle size={15} />
+                <span>
+                  This calls <code>DELETE /api/admin/competition/schedules/{scheduleToDelete.id}</code>.
+                </span>
+              </div>
+            </div>
+
+            <div className="modal-actions">
+              <button
+                type="button"
+                className="secondary small-btn"
+                onClick={() => setShowDeleteScheduleModal(false)}
+                disabled={deletingSchedule}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="danger small-btn"
+                onClick={handleDeleteSchedule}
+                disabled={deletingSchedule}
+              >
+                {deletingSchedule ? 'Deleting...' : 'Yes, Delete Slot'}
+              </button>
+            </div>
           </div>
         </div>
       )}

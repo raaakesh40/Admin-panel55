@@ -12,6 +12,7 @@ import {
   Key,
   CreditCard,
   Edit2,
+  Trash2,
 } from 'lucide-react'
 
 export function HostsView() {
@@ -56,6 +57,12 @@ export function HostsView() {
   const [activeResetHost, setActiveResetHost] = useState<Host | null>(null)
   const [resetPassInput, setResetPassInput] = useState('')
   const [resetLoading, setResetLoading] = useState(false)
+
+  // Delete Modal
+  // Schema: DELETE /api/admin/hosts/:id
+  const [showDeleteModal, setShowDeleteModal] = useState(false)
+  const [activeDeleteHost, setActiveDeleteHost] = useState<Host | null>(null)
+  const [deleteLoading, setDeleteLoading] = useState(false)
 
   // Fetch Hosts: GET /api/hosts
   async function fetchHosts() {
@@ -259,6 +266,40 @@ export function HostsView() {
     }
   }
 
+  // Delete Host: DELETE /api/admin/hosts/:id
+  function promptDeleteHost(h: Host) {
+    setActiveDeleteHost(h)
+    setShowDeleteModal(true)
+  }
+
+  async function handleDeleteHost() {
+    if (!activeDeleteHost) return
+    setDeleteLoading(true)
+    setErrorMessage('')
+    setActionSuccess('')
+
+    try {
+      try {
+        await api(`/admin/hosts/${activeDeleteHost.id}`, {
+          method: 'DELETE',
+        })
+      } catch {
+        await api(`/hosts/${activeDeleteHost.id}`, {
+          method: 'DELETE',
+        })
+      }
+
+      setActionSuccess(`Host account "${activeDeleteHost.name}" was successfully deleted.`)
+      setShowDeleteModal(false)
+      setActiveDeleteHost(null)
+      await fetchHosts()
+    } catch (err) {
+      setErrorMessage(err instanceof Error ? err.message : 'Failed to delete host account.')
+    } finally {
+      setDeleteLoading(false)
+    }
+  }
+
   const filteredHosts = hosts.filter((h) => {
     const q = searchQuery.toLowerCase().trim()
     const matchesQuery =
@@ -449,6 +490,14 @@ export function HostsView() {
                     title="Toggle Status (PATCH /api/admin/hosts/:id/status)"
                   >
                     {isActive ? 'Disable' : 'Enable'}
+                  </button>
+
+                  <button
+                    className="danger small-btn"
+                    onClick={() => promptDeleteHost(h)}
+                    title="Delete host account permanently"
+                  >
+                    <Trash2 size={13} /> Delete
                   </button>
                 </div>
               </article>
@@ -701,6 +750,58 @@ export function HostsView() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* DELETE HOST CONFIRMATION MODAL: DELETE /api/admin/hosts/:id */}
+      {showDeleteModal && activeDeleteHost && (
+        <div className="modal-overlay" onClick={() => !deleteLoading && setShowDeleteModal(false)}>
+          <div className="modal-content modal-confirm" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <div className="modal-title-wrap">
+                <Trash2 size={20} color="var(--coral-color)" />
+                <h3 style={{ color: 'var(--coral-color)' }}>Delete Host: {activeDeleteHost.name}?</h3>
+              </div>
+              <button
+                className="close-btn"
+                onClick={() => !deleteLoading && setShowDeleteModal(false)}
+                disabled={deleteLoading}
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="modal-confirm-body">
+              <p>
+                Are you sure you want to permanently delete host <strong>{activeDeleteHost.name}</strong> (Phone: <code>{activeDeleteHost.mobileNumber || 'N/A'}</code>, ID: <code>{activeDeleteHost.id}</code>)?
+              </p>
+              <div className="alert-box error" style={{ margin: '12px 0 16px' }}>
+                <AlertCircle size={15} />
+                <span>
+                  This calls <code>DELETE /api/admin/hosts/{activeDeleteHost.id}</code>. Their login credentials and permissions will be permanently revoked.
+                </span>
+              </div>
+            </div>
+
+            <div className="modal-actions">
+              <button
+                type="button"
+                className="secondary small-btn"
+                onClick={() => setShowDeleteModal(false)}
+                disabled={deleteLoading}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="danger small-btn"
+                onClick={handleDeleteHost}
+                disabled={deleteLoading}
+              >
+                {deleteLoading ? 'Deleting...' : 'Yes, Delete Host'}
+              </button>
+            </div>
           </div>
         </div>
       )}

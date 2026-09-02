@@ -15,6 +15,7 @@ import {
   Edit2,
   Power,
   Filter,
+  Trash2,
 } from 'lucide-react'
 
 interface GamesViewProps {
@@ -44,6 +45,11 @@ export function GamesView({ onNavigateToOmb, onNavigateToTournament }: GamesView
   const [editGameIsActive, setEditGameIsActive] = useState(true)
   const [showEditModal, setShowEditModal] = useState(false)
   const [updatingGame, setUpdatingGame] = useState(false)
+
+  // Delete Modal
+  const [gameToDelete, setGameToDelete] = useState<Game | null>(null)
+  const [showDeleteModal, setShowDeleteModal] = useState(false)
+  const [deletingGame, setDeletingGame] = useState(false)
 
   async function loadData() {
     setLoading(true)
@@ -253,6 +259,45 @@ export function GamesView({ onNavigateToOmb, onNavigateToTournament }: GamesView
     }
   }
 
+  function promptDeleteGame(g: Game) {
+    setGameToDelete(g)
+    setShowDeleteModal(true)
+  }
+
+  async function handleDeleteGame() {
+    if (!gameToDelete) return
+    setDeletingGame(true)
+    setErrorMessage('')
+    setSuccessMessage('')
+
+    try {
+      try {
+        await api(`/admin/competition/games/${gameToDelete.id}`, {
+          method: 'DELETE',
+        })
+      } catch {
+        // Fallback to /competitions/games/:id
+        await api(`/competitions/games/${gameToDelete.id}`, {
+          method: 'DELETE',
+        })
+      }
+
+      setSuccessMessage(`Game "${gameToDelete.name}" deleted successfully.`)
+      setShowDeleteModal(false)
+      setShowEditModal(false)
+      setGameToDelete(null)
+      await loadData()
+    } catch (err) {
+      setErrorMessage(
+        err instanceof Error
+          ? err.message
+          : `Failed to delete game "${gameToDelete.name}". It may have linked competition modes.`
+      )
+    } finally {
+      setDeletingGame(false)
+    }
+  }
+
   const filteredGames = games.filter((g) => {
     const matchesSearch = g.name.toLowerCase().includes(searchQuery.toLowerCase())
     if (!matchesSearch) return false
@@ -425,14 +470,24 @@ export function GamesView({ onNavigateToOmb, onNavigateToTournament }: GamesView
                   <div className="catalog-game-info">
                     <div className="catalog-name-row">
                       <h4>{g.name}</h4>
-                      <button
-                        className="icon-edit-btn"
-                        onClick={() => openEditGame(g)}
-                        title="Edit Game"
-                        aria-label={`Edit game ${g.name}`}
-                      >
-                        <Edit2 size={13} />
-                      </button>
+                      <div className="card-action-icons">
+                        <button
+                          className="icon-edit-btn"
+                          onClick={() => openEditGame(g)}
+                          title="Edit Game"
+                          aria-label={`Edit game ${g.name}`}
+                        >
+                          <Edit2 size={13} />
+                        </button>
+                        <button
+                          className="icon-delete-btn"
+                          onClick={() => promptDeleteGame(g)}
+                          title="Delete Game"
+                          aria-label={`Delete game ${g.name}`}
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                      </div>
                     </div>
                     <span className="catalog-game-uuid">ID: {g.id}</span>
                     <div className="status-toggle-row">
@@ -596,23 +651,89 @@ export function GamesView({ onNavigateToOmb, onNavigateToTournament }: GamesView
                 <span>Active in Catalog (allows new modes & schedules)</span>
               </label>
 
-              <div className="modal-actions">
+              <div className="modal-actions-spaced">
                 <button
                   type="button"
-                  className="secondary small-btn"
-                  onClick={() => setShowEditModal(false)}
+                  className="danger small-btn"
+                  onClick={() => {
+                    setShowEditModal(false)
+                    promptDeleteGame(editingGame)
+                  }}
+                  title="Delete this game permanently"
                 >
-                  Cancel
+                  <Trash2 size={13} /> Delete Game
                 </button>
-                <button
-                  type="submit"
-                  className="primary small-btn"
-                  disabled={updatingGame}
-                >
-                  {updatingGame ? 'Saving...' : 'Save Changes'}
-                </button>
+
+                <div className="modal-actions-right">
+                  <button
+                    type="button"
+                    className="secondary small-btn"
+                    onClick={() => setShowEditModal(false)}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="primary small-btn"
+                    disabled={updatingGame}
+                  >
+                    {updatingGame ? 'Saving...' : 'Save Changes'}
+                  </button>
+                </div>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Delete Confirmation */}
+      {showDeleteModal && gameToDelete && (
+        <div className="modal-overlay" onClick={() => !deletingGame && setShowDeleteModal(false)}>
+          <div className="modal-content modal-confirm" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <div className="modal-title-wrap">
+                <Trash2 size={20} color="var(--coral-color)" />
+                <h3 style={{ color: 'var(--coral-color)' }}>Delete Game: {gameToDelete.name}?</h3>
+              </div>
+              <button
+                className="close-btn"
+                onClick={() => !deletingGame && setShowDeleteModal(false)}
+                disabled={deletingGame}
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="modal-confirm-body">
+              <p>
+                Are you sure you want to permanently delete <strong>{gameToDelete.name}</strong> (ID: <code>{gameToDelete.id}</code>)?
+              </p>
+              <div className="alert-box error" style={{ margin: '12px 0 16px' }}>
+                <AlertCircle size={15} />
+                <span>
+                  This action calls <code>DELETE /api/admin/competition/games/{gameToDelete.id}</code>. If this game has active OMB or Tournament modes, you must delete those modes first.
+                </span>
+              </div>
+            </div>
+
+            <div className="modal-actions">
+              <button
+                type="button"
+                className="secondary small-btn"
+                onClick={() => setShowDeleteModal(false)}
+                disabled={deletingGame}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="danger small-btn"
+                onClick={handleDeleteGame}
+                disabled={deletingGame}
+              >
+                {deletingGame ? 'Deleting...' : 'Yes, Permanently Delete'}
+              </button>
+            </div>
           </div>
         </div>
       )}
