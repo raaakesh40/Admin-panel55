@@ -141,12 +141,20 @@ export function NotificationsView() {
     const cleanTitle = title.trim()
     const cleanMsg = message.trim()
 
+    const target = targetAudience === 'active_players' ? 'active' : targetAudience === 'hosts' ? 'hosts' : targetAudience === 'specific_user' ? 'users' : 'all'
+
     const payload: Record<string, unknown> = {
       title: cleanTitle,
+      body: cleanMsg,
       message: cleanMsg,
+      target,
       targetAudience,
       type: notificationType,
       priority,
+      data: {
+        type: notificationType,
+        priority,
+      },
     }
 
     if (targetAudience === 'specific_user') {
@@ -156,6 +164,7 @@ export function NotificationsView() {
         return
       }
       payload.userId = targetUserId.trim()
+      payload.targetUserId = targetUserId.trim()
     }
 
     try {

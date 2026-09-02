@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useCallback } from 'react'
 import type { FormEvent } from 'react'
 import type { UserResult } from '../types'
 import { api } from '../services/api'
@@ -11,14 +11,34 @@ import {
   ArrowUpRight,
   AlertCircle,
   CheckCircle2,
+  KeyRound,
+  CreditCard,
 } from 'lucide-react'
+
+interface PayoutAccountItem {
+  id: string
+  type?: string
+  upiId?: string
+  accountNumber?: string
+  ifsc?: string
+  bankName?: string
+  holderName?: string
+  status?: string
+  isPrimary?: boolean
+  createdAt?: string
+}
 
 export function UsersView() {
   const [query, setQuery] = useState('')
   const [loading, setLoading] = useState(false)
   const [result, setResult] = useState<UserResult | null>(null)
+  const [searchResults, setSearchResults] = useState<UserResult[]>([])
   const [errorMessage, setErrorMessage] = useState('')
   const [actionSuccess, setActionSuccess] = useState('')
+
+  // Payout accounts
+  const [payoutAccounts, setPayoutAccounts] = useState<PayoutAccountItem[]>([])
+  const [payoutLoading, setPayoutLoading] = useState(false)
 
   // Action states
   const [statusLoading, setStatusLoading] = useState(false)
@@ -29,6 +49,83 @@ export function UsersView() {
   const [adjustReason, setAdjustReason] = useState('')
   const [adjustLoading, setAdjustLoading] = useState(false)
 
+  // Password reset modal
+  const [showResetModal, setShowResetModal] = useState(false)
+  const [resetPasswordInput, setResetPasswordInput] = useState('')
+  const [resetLoading, setResetLoading] = useState(false)
+
+  const fetchPayoutAccounts = useCallback(async (userId: string) => {
+    if (!userId) {
+      setPayoutAccounts([])
+      return
+    }
+    setPayoutLoading(true)
+    try {
+      let data: unknown = null
+      try {
+        data = await api<unknown>(`/operations/users/${encodeURIComponent(userId)}/payout-accounts`)
+      } catch {
+        data = await api<unknown>(`/admin/users/${encodeURIComponent(userId)}/payout-accounts`).catch(() => null)
+      }
+
+      let list: PayoutAccountItem[] = []
+      if (Array.isArray(data)) {
+        list = data as PayoutAccountItem[]
+      } else if (data && typeof data === 'object') {
+        const obj = data as Record<string, unknown>
+        if (Array.isArray(obj.accounts)) list = obj.accounts as PayoutAccountItem[]
+        else if (Array.isArray(obj.data)) list = obj.data as PayoutAccountItem[]
+        else if (Array.isArray(obj.payoutAccounts)) list = obj.payoutAccounts as PayoutAccountItem[]
+      }
+      setPayoutAccounts(list)
+    } catch {
+      setPayoutAccounts([])
+    } finally {
+      setPayoutLoading(false)
+    }
+  }, [])
+
+  function normalizeUserToResult(userObj: Record<string, unknown>): UserResult {
+    return {
+      user: {
+        id: String(userObj.id || userObj._id || userObj.userId || ''),
+        username: String(userObj.username || userObj.userName || userObj.name || 'player'),
+        name: String(userObj.name || userObj.username || 'Player'),
+        mobileNumber: String(userObj.mobileNumber || userObj.mobile || userObj.phone || ''),
+        email: userObj.email ? String(userObj.email) : undefined,
+        accountStatus: (userObj.accountStatus || userObj.status || 'active') as 'active' | 'suspended' | 'banned',
+        role: String(userObj.role || 'user'),
+        createdAt: String(userObj.createdAt || userObj.created_at || new Date().toISOString()),
+      },
+      wallets: [
+        {
+          walletType: 'play_coins',
+          balance: Number(userObj.playCoins ?? userObj.play_coins ?? userObj.playBalance ?? 0),
+          available: Number(userObj.playCoins ?? userObj.play_coins ?? userObj.playBalance ?? 0),
+        },
+        {
+          walletType: 'winning_coins',
+          balance: Number(userObj.winningCoins ?? userObj.winning_coins ?? userObj.winningBalance ?? 0),
+          available: Number(userObj.winningCoins ?? userObj.winning_coins ?? userObj.winningBalance ?? 0),
+        },
+      ],
+      totals: {
+        deposited: Number(userObj.totalDeposited ?? userObj.deposited ?? 0),
+        withdrawn: Number(userObj.totalWithdrawn ?? userObj.withdrawn ?? 0),
+      },
+      activity: {
+        ombsJoined: Number(userObj.ombsJoined ?? 0),
+        ombsWon: Number(userObj.ombsWon ?? 0),
+        tournamentsJoined: Number(userObj.tournamentsJoined ?? 0),
+        tournamentsWon: Number(userObj.tournamentsWon ?? 0),
+      },
+      current: {
+        omb: null,
+        tournament: null,
+      },
+    }
+  }
+
   async function handleSearch(event: FormEvent) {
     event.preventDefault()
     if (!query.trim()) return
@@ -37,74 +134,43 @@ export function UsersView() {
     setErrorMessage('')
     setActionSuccess('')
     setResult(null)
+    setSearchResults([])
 
     try {
       const clean = query.trim()
-      const isPhone = /^[0-9+]{5,15}$/.test(clean)
+      const isPhone = /^[0-9+]{7,15}$/.test(clean)
       const param = isPhone ? `mobileNumber=${encodeURIComponent(clean)}` : `q=${encodeURIComponent(clean)}`
       
       const data = await api<unknown>(`/operations/users/search?${param}`)
       
-      let userObj: Record<string, unknown> | null = null
+      let rawUsers: Record<string, unknown>[] = []
       if (data && typeof data === 'object') {
         const d = data as Record<string, unknown>
-        if (Array.isArray(d.users) && d.users.length > 0) {
-          userObj = d.users[0] as Record<string, unknown>
-        } else if (Array.isArray(data) && (data as unknown[]).length > 0) {
-          userObj = (data as unknown[])[0] as Record<string, unknown>
+        if (Array.isArray(d.users)) {
+          rawUsers = d.users as Record<string, unknown>[]
+        } else if (Array.isArray(d.data)) {
+          rawUsers = d.data as Record<string, unknown>[]
+        } else if (Array.isArray(data)) {
+          rawUsers = data as Record<string, unknown>[]
         } else if (d.user && typeof d.user === 'object') {
           setResult(d as unknown as UserResult)
           return
         } else if (d.id || d.username || d.mobileNumber) {
-          userObj = d
+          rawUsers = [d]
         }
       }
 
-      if (!userObj) {
+      if (rawUsers.length === 0) {
         setErrorMessage(`No user found for "${clean}".`)
         return
       }
 
-      const normalized: UserResult = {
-        user: {
-          id: String(userObj.id || userObj._id || clean),
-          username: String(userObj.username || userObj.name || 'player'),
-          name: String(userObj.name || userObj.username || 'Player'),
-          mobileNumber: String(userObj.mobileNumber || userObj.mobile || userObj.phone || clean),
-          email: userObj.email ? String(userObj.email) : undefined,
-          accountStatus: (userObj.accountStatus || userObj.status || 'active') as 'active' | 'suspended' | 'banned',
-          role: String(userObj.role || 'user'),
-          createdAt: String(userObj.createdAt || new Date().toISOString()),
-        },
-        wallets: [
-          {
-            walletType: 'play_coins',
-            balance: Number(userObj.playCoins ?? userObj.play_coins ?? userObj.playBalance ?? 0),
-            available: Number(userObj.playCoins ?? userObj.play_coins ?? userObj.playBalance ?? 0),
-          },
-          {
-            walletType: 'winning_coins',
-            balance: Number(userObj.winningCoins ?? userObj.winning_coins ?? userObj.winningBalance ?? 0),
-            available: Number(userObj.winningCoins ?? userObj.winning_coins ?? userObj.winningBalance ?? 0),
-          },
-        ],
-        totals: {
-          deposited: Number(userObj.totalDeposited ?? userObj.deposited ?? 0),
-          withdrawn: Number(userObj.totalWithdrawn ?? userObj.withdrawn ?? 0),
-        },
-        activity: {
-          ombsJoined: Number(userObj.ombsJoined ?? 0),
-          ombsWon: Number(userObj.ombsWon ?? 0),
-          tournamentsJoined: Number(userObj.tournamentsJoined ?? 0),
-          tournamentsWon: Number(userObj.tournamentsWon ?? 0),
-        },
-        current: {
-          omb: null,
-          tournament: null,
-        },
+      const normalizedList = rawUsers.map(normalizeUserToResult)
+      setSearchResults(normalizedList)
+      setResult(normalizedList[0])
+      if (normalizedList[0]?.user?.id) {
+        fetchPayoutAccounts(normalizedList[0].user.id)
       }
-
-      setResult(normalized)
     } catch (e) {
       setErrorMessage(e instanceof Error ? e.message : 'User not found.')
     } finally {
@@ -121,19 +187,57 @@ export function UsersView() {
     const apiStatus = newStatus === 'active' ? 'active' : 'suspended'
 
     try {
-      await api(`/admin/users/${result.user.id}/status`, {
-        method: 'PATCH',
-        body: JSON.stringify({ status: apiStatus }),
-      })
+      try {
+        await api(`/admin/users/${encodeURIComponent(result.user.id)}/status`, {
+          method: 'PATCH',
+          body: JSON.stringify({ status: apiStatus }),
+        })
+      } catch {
+        await api(`/operations/users/${encodeURIComponent(result.user.id)}/status`, {
+          method: 'PATCH',
+          body: JSON.stringify({ accountStatus: apiStatus }),
+        })
+      }
+
       setResult({
         ...result,
         user: { ...result.user, accountStatus: newStatus },
       })
-      setActionSuccess(`Status changed to ${newStatus.toUpperCase()}.`)
+      setActionSuccess(`User status changed to ${newStatus.toUpperCase()} on server.`)
     } catch (err) {
-      setErrorMessage(err instanceof Error ? err.message : 'Update failed.')
+      setErrorMessage(err instanceof Error ? err.message : 'Status update failed.')
     } finally {
       setStatusLoading(false)
+    }
+  }
+
+  async function handleResetPassword(e: FormEvent) {
+    e.preventDefault()
+    if (!result || !resetPasswordInput.trim()) return
+    setResetLoading(true)
+    setErrorMessage('')
+    setActionSuccess('')
+
+    try {
+      try {
+        await api(`/operations/users/${encodeURIComponent(result.user.id)}/password-reset`, {
+          method: 'POST',
+          body: JSON.stringify({ password: resetPasswordInput.trim() }),
+        })
+      } catch {
+        await api(`/admin/users/${encodeURIComponent(result.user.id)}/password-reset`, {
+          method: 'POST',
+          body: JSON.stringify({ password: resetPasswordInput.trim() }),
+        })
+      }
+
+      setActionSuccess(`Password reset successfully for ${result.user.name || result.user.username}.`)
+      setShowResetModal(false)
+      setResetPasswordInput('')
+    } catch (err) {
+      setErrorMessage(err instanceof Error ? err.message : 'Password reset failed.')
+    } finally {
+      setResetLoading(false)
     }
   }
 
@@ -149,7 +253,7 @@ export function UsersView() {
     const backendWalletType = adjustWalletType === 'play_coins' ? 'playCoins' : 'winningCoins'
 
     try {
-      await api(`/admin/users/${result.user.id}/wallet-adjust`, {
+      await api(`/admin/users/${encodeURIComponent(result.user.id)}/wallet-adjust`, {
         method: 'POST',
         body: JSON.stringify({
           walletType: backendWalletType,
@@ -174,7 +278,7 @@ export function UsersView() {
       setActionSuccess(
         `${adjustAction === 'add' ? 'Added' : 'Deducted'} ₹${numericAmount} ${
           adjustWalletType === 'play_coins' ? 'Play Coins' : 'Winning Coins'
-        }.`
+        } on server.`
       )
       setShowAdjustModal(false)
       setAdjustAmount('')
@@ -260,6 +364,15 @@ export function UsersView() {
                 >
                   <Coins size={14} /> Adjust Balance
                 </button>
+                <button
+                  className="secondary small-btn"
+                  onClick={() => {
+                    setResetPasswordInput('')
+                    setShowResetModal(true)
+                  }}
+                >
+                  <KeyRound size={14} /> Reset Password
+                </button>
                 {(result.user.accountStatus || 'active').toLowerCase() === 'active' ? (
                   <button
                     className="danger small-btn"
@@ -280,6 +393,25 @@ export function UsersView() {
               </div>
             </div>
           </div>
+
+          {searchResults.length > 1 && (
+            <div className="search-multi-results" style={{ marginBottom: '16px', display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
+              <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Matching Users ({searchResults.length}):</span>
+              {searchResults.map((sr) => (
+                <button
+                  key={sr.user.id}
+                  type="button"
+                  className={`small-btn ${sr.user.id === result.user.id ? 'primary' : 'secondary'}`}
+                  onClick={() => {
+                    setResult(sr)
+                    fetchPayoutAccounts(sr.user.id)
+                  }}
+                >
+                  {sr.user.name} ({sr.user.mobileNumber || sr.user.username})
+                </button>
+              ))}
+            </div>
+          )}
 
           <div className="user-stats-grid">
             <div className="stat-card">
@@ -328,6 +460,97 @@ export function UsersView() {
                 <strong className="text-green">{result.activity?.tournamentsWon ?? 0}</strong>
               </div>
             </div>
+          </div>
+
+          {/* Payout Accounts Section */}
+          <div className="activity-breakdown-card" style={{ marginTop: '16px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+              <h4 style={{ display: 'flex', alignItems: 'center', gap: '8px', margin: 0 }}>
+                <CreditCard size={16} /> Payout Accounts
+              </h4>
+              <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+                {payoutLoading ? 'Loading...' : `${payoutAccounts.length} Connected`}
+              </span>
+            </div>
+            {payoutAccounts.length === 0 ? (
+              <p style={{ fontSize: '13px', color: 'var(--text-muted)', margin: 0 }}>
+                {payoutLoading ? 'Fetching payout details...' : 'No withdrawal/payout accounts registered for this player.'}
+              </p>
+            ) : (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: '12px' }}>
+                {payoutAccounts.map((acc, idx) => (
+                  <div
+                    key={acc.id || idx}
+                    style={{
+                      padding: '12px',
+                      background: 'var(--bg-card, #1a1a24)',
+                      border: '1px solid var(--border-color, #2d2d3d)',
+                      borderRadius: '8px',
+                      fontSize: '13px',
+                    }}
+                  >
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
+                      <span className="badge-tag" style={{ textTransform: 'uppercase' }}>
+                        {acc.type || (acc.upiId ? 'UPI' : 'Bank')}
+                      </span>
+                      {acc.status && (
+                        <span className={`status-pill ${acc.status.toLowerCase()}`}>
+                          {acc.status}
+                        </span>
+                      )}
+                    </div>
+                    {acc.upiId && <div><strong>UPI:</strong> {acc.upiId}</div>}
+                    {acc.accountNumber && <div><strong>A/C:</strong> {acc.accountNumber}</div>}
+                    {acc.ifsc && <div><strong>IFSC:</strong> {acc.ifsc}</div>}
+                    {acc.holderName && <div><strong>Name:</strong> {acc.holderName}</div>}
+                    {acc.bankName && <div><strong>Bank:</strong> {acc.bankName}</div>}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Password Reset Modal */}
+      {showResetModal && result && (
+        <div className="modal-overlay">
+          <div className="modal-content">
+            <div className="modal-header">
+              <h3>Reset Password</h3>
+              <button className="close-btn" onClick={() => setShowResetModal(false)}>
+                ✕
+              </button>
+            </div>
+            <form onSubmit={handleResetPassword} className="modal-form">
+              <p style={{ fontSize: '13px', color: 'var(--text-muted)' }}>
+                Set a new password on the live server for{' '}
+                <strong>{result.user.name || result.user.username}</strong> ({result.user.mobileNumber || result.user.id}):
+              </p>
+              <label>
+                New Password
+                <input
+                  required
+                  type="password"
+                  placeholder="Enter new password"
+                  value={resetPasswordInput}
+                  onChange={(e) => setResetPasswordInput(e.target.value)}
+                />
+              </label>
+
+              <div className="modal-actions">
+                <button
+                  type="button"
+                  className="secondary"
+                  onClick={() => setShowResetModal(false)}
+                >
+                  Cancel
+                </button>
+                <button type="submit" className="primary" disabled={resetLoading}>
+                  {resetLoading ? 'Resetting...' : 'Confirm Reset'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

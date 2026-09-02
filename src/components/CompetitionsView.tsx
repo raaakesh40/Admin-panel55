@@ -167,6 +167,11 @@ export function CompetitionsView() {
   const [roomInputPass, setRoomInputPass] = useState('')
   const [roomLoading, setRoomLoading] = useState(false)
 
+  // Cancel match modal state
+  const [activeCancelMatch, setActiveCancelMatch] = useState<CompetitionItem | null>(null)
+  const [cancelReason, setCancelReason] = useState('Host not available')
+  const [cancelLoading, setCancelLoading] = useState(false)
+
   async function handleSearch(event: FormEvent) {
     event.preventDefault()
     setErrorMessage('')
@@ -204,17 +209,33 @@ export function CompetitionsView() {
     setErrorMessage('')
     setActionSuccess('')
 
-    try {
-      await api(`/admin/competitions/${activeRoomMatch.id}/room`, {
-        method: 'POST',
-        body: JSON.stringify({
-          type: activeRoomMatch.type || 'omb',
-          roomId: roomInputId.trim(),
-          roomPassword: roomInputPass.trim(),
-        }),
-      })
+    const payload = {
+      roomId: roomInputId.trim(),
+      roomPassword: roomInputPass.trim(),
+      type: activeRoomMatch.type || 'omb',
+    }
 
-      setActionSuccess(`Room credentials saved for match ${activeRoomMatch.code}.`)
+    try {
+      try {
+        await api(`/competitions/${encodeURIComponent(activeRoomMatch.id)}/room`, {
+          method: 'PATCH',
+          body: JSON.stringify(payload),
+        })
+      } catch {
+        try {
+          await api(`/admin/competitions/${encodeURIComponent(activeRoomMatch.id)}/room`, {
+            method: 'PATCH',
+            body: JSON.stringify(payload),
+          })
+        } catch {
+          await api(`/admin/competitions/${encodeURIComponent(activeRoomMatch.id)}/room`, {
+            method: 'POST',
+            body: JSON.stringify(payload),
+          })
+        }
+      }
+
+      setActionSuccess(`Room credentials updated for match ${activeRoomMatch.code}.`)
       setActiveRoomMatch(null)
       await fetchCompetitionsList()
     } catch (err) {
@@ -224,10 +245,43 @@ export function CompetitionsView() {
     }
   }
 
+  async function handleCancelCompetition(e: FormEvent) {
+    e.preventDefault()
+    if (!activeCancelMatch) return
+    setCancelLoading(true)
+    setErrorMessage('')
+    setActionSuccess('')
+
+    try {
+      await api(`/admin/competitions/${encodeURIComponent(activeCancelMatch.id)}/cancel`, {
+        method: 'POST',
+        body: JSON.stringify({
+          reason: cancelReason.trim() || 'Cancelled by admin',
+        }),
+      })
+
+      setActionSuccess(
+        `Match ${activeCancelMatch.code} cancelled. All participants have been refunded on the server.`
+      )
+      setActiveCancelMatch(null)
+      setCancelReason('Host not available')
+      await fetchCompetitionsList()
+    } catch (err) {
+      setErrorMessage(err instanceof Error ? err.message : 'Failed to cancel match.')
+    } finally {
+      setCancelLoading(false)
+    }
+  }
+
   function openRoomModal(match: CompetitionItem) {
     setActiveRoomMatch(match)
     setRoomInputId(match.roomId || '')
     setRoomInputPass(match.roomPassword || '')
+  }
+
+  function openCancelModal(match: CompetitionItem) {
+    setActiveCancelMatch(match)
+    setCancelReason('Host not available')
   }
 
   const filteredMatches = competitionsList.filter((m) => {
@@ -333,12 +387,22 @@ export function CompetitionsView() {
                   <b>{searchResult.roomPassword || 'None'}</b>
                 </span>
               </div>
-              <button
-                className="secondary small-btn"
-                onClick={() => openRoomModal(searchResult)}
-              >
-                Set Room
-              </button>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button
+                  className="secondary small-btn"
+                  onClick={() => openRoomModal(searchResult)}
+                >
+                  Set Room
+                </button>
+                {searchResult.status !== 'cancelled' && searchResult.status !== 'completed' && (
+                  <button
+                    className="danger small-btn"
+                    onClick={() => openCancelModal(searchResult)}
+                  >
+                    Cancel Match
+                  </button>
+                )}
+              </div>
             </div>
           </div>
         </div>
@@ -428,12 +492,23 @@ export function CompetitionsView() {
                 <div className="host-info">
                   <span>Host: {match.hostName}</span>
                 </div>
-                <button
-                  className="secondary small-btn"
-                  onClick={() => openRoomModal(match)}
-                >
-                  <Key size={12} /> {match.roomId ? 'Edit Room' : 'Set Room'}
-                </button>
+                <div style={{ display: 'flex', gap: '6px' }}>
+                  <button
+                    className="secondary small-btn"
+                    onClick={() => openRoomModal(match)}
+                  >
+                    <Key size={12} /> {match.roomId ? 'Edit Room' : 'Set Room'}
+                  </button>
+                  {match.status !== 'cancelled' && match.status !== 'completed' && (
+                    <button
+                      className="danger small-btn"
+                      onClick={() => openCancelModal(match)}
+                      title="Cancel match & refund participants"
+                    >
+                      Cancel
+                    </button>
+                  )}
+                </div>
               </div>
             </article>
           ))}
@@ -482,6 +557,55 @@ export function CompetitionsView() {
                 </button>
                 <button type="submit" className="primary" disabled={roomLoading}>
                   {roomLoading ? 'Saving...' : 'Save Room'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Cancel Match Modal */}
+      {activeCancelMatch && (
+        <div className="modal-overlay">
+          <div className="modal-content">
+            <div className="modal-header">
+              <h3>Cancel Match ({activeCancelMatch.code})</h3>
+              <button className="close-btn" onClick={() => setActiveCancelMatch(null)}>
+                ✕
+              </button>
+            </div>
+            <form onSubmit={handleCancelCompetition} className="modal-form">
+              <div className="alert-box error" style={{ marginBottom: '12px' }}>
+                <AlertCircle size={16} />
+                <span>
+                  Are you sure you want to cancel match <strong>{activeCancelMatch.code}</strong>?
+                </span>
+              </div>
+              <p style={{ fontSize: '13px', color: 'var(--text-muted)' }}>
+                The server will automatically release wallet holds or refund all registered participants.
+              </p>
+
+              <label>
+                Cancellation Reason
+                <input
+                  required
+                  type="text"
+                  placeholder="e.g. Host not available, Technical glitch"
+                  value={cancelReason}
+                  onChange={(e) => setCancelReason(e.target.value)}
+                />
+              </label>
+
+              <div className="modal-actions">
+                <button
+                  type="button"
+                  className="secondary"
+                  onClick={() => setActiveCancelMatch(null)}
+                >
+                  Back
+                </button>
+                <button type="submit" className="danger" disabled={cancelLoading}>
+                  {cancelLoading ? 'Cancelling & Refunding...' : 'Confirm Cancel Match'}
                 </button>
               </div>
             </form>

@@ -629,7 +629,10 @@ export function HostsView() {
     setShowDeleteModal(true)
   }
 
-  async function handleDeleteHost() {
+  // Permanent Delete: DELETE /api/admin/hosts/:id?permanent=true
+  // Permanent delete only succeeds if host has no competitions, participants, transactions, deposits, or active assignments.
+  // If history exists, backend returns 409 Conflict.
+  async function handlePermanentDeleteHost() {
     if (!activeDeleteHost) return
     const targetId = activeDeleteHost.id
     const targetName = activeDeleteHost.name
@@ -639,53 +642,49 @@ export function HostsView() {
     setActionSuccess('')
 
     try {
-      let deleted = false
-      let lastErr: unknown = null
+      await api(`/admin/hosts/${encodeURIComponent(targetId)}?permanent=true`, {
+        method: 'DELETE',
+      })
 
-      // Attempt permanent deletion on real server
-      const deleteAttempts = [
-        { path: `/admin/hosts/${encodeURIComponent(targetId)}?force=true&permanent=true&hard=true`, method: 'DELETE' },
-        { path: `/admin/hosts/${encodeURIComponent(targetId)}`, method: 'DELETE' },
-        { path: `/hosts/${encodeURIComponent(targetId)}?force=true&permanent=true&hard=true`, method: 'DELETE' },
-        { path: `/hosts/${encodeURIComponent(targetId)}`, method: 'DELETE' },
-        { path: `/admin/users/${encodeURIComponent(targetId)}?force=true&permanent=true&hard=true`, method: 'DELETE' },
-        { path: `/admin/users/${encodeURIComponent(targetId)}`, method: 'DELETE' },
-        { path: `/admin/competition/hosts/${encodeURIComponent(targetId)}`, method: 'DELETE' },
-        { path: `/admin/hosts/${encodeURIComponent(targetId)}/delete`, method: 'POST', body: JSON.stringify({ force: true, permanent: true, hard: true, id: targetId, hostId: targetId }) },
-        { path: `/hosts/${encodeURIComponent(targetId)}/delete`, method: 'POST', body: JSON.stringify({ force: true, permanent: true, hard: true, id: targetId, hostId: targetId }) },
-        { path: `/admin/hosts/delete`, method: 'POST', body: JSON.stringify({ id: targetId, hostId: targetId, force: true, permanent: true, hard: true }) },
-        { path: `/admin/hosts/remove`, method: 'POST', body: JSON.stringify({ id: targetId, hostId: targetId, force: true, permanent: true, hard: true }) },
-        { path: `/admin/users/delete`, method: 'POST', body: JSON.stringify({ id: targetId, userId: targetId, force: true, permanent: true, hard: true }) },
-        { path: `/admin/hosts`, method: 'DELETE', body: JSON.stringify({ id: targetId, hostId: targetId, force: true, permanent: true, hard: true }) },
-      ]
-
-      for (const att of deleteAttempts) {
-        try {
-          await api(att.path, {
-            method: att.method,
-            body: att.body,
-          })
-          deleted = true
-          break
-        } catch (err) {
-          lastErr = err
-        }
-      }
-
-      if (!deleted) {
-        // If server failed to delete, do not disable or fake delete. Throw real server error.
-        if (lastErr) throw lastErr
-        throw new Error('Server did not complete host deletion.')
-      }
-
-      setActionSuccess(`Host "${targetName}" deleted successfully from server.`)
+      setActionSuccess(`Host "${targetName}" was permanently deleted from server.`)
       setShowDeleteModal(false)
       setActiveDeleteHost(null)
 
       // Refresh live server state
       await fetchHosts()
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Failed to delete host on server.'
+      const msg = err instanceof Error ? err.message : 'Failed to permanently delete host on server.'
+      setErrorMessage(msg)
+      setModalErrorMessage(msg)
+    } finally {
+      setDeleteLoading(false)
+    }
+  }
+
+  // Disable Host: DELETE /api/admin/hosts/:id
+  // Changes host status to disabled on server without permanent removal.
+  async function handleDisableHost() {
+    if (!activeDeleteHost) return
+    const targetId = activeDeleteHost.id
+    const targetName = activeDeleteHost.name
+    setDeleteLoading(true)
+    setErrorMessage('')
+    setModalErrorMessage('')
+    setActionSuccess('')
+
+    try {
+      await api(`/admin/hosts/${encodeURIComponent(targetId)}`, {
+        method: 'DELETE',
+      })
+
+      setActionSuccess(`Host "${targetName}" has been disabled (status: disabled) on server.`)
+      setShowDeleteModal(false)
+      setActiveDeleteHost(null)
+
+      // Refresh live server state
+      await fetchHosts()
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Failed to disable host on server.'
       setErrorMessage(msg)
       setModalErrorMessage(msg)
     } finally {
@@ -1311,19 +1310,21 @@ export function HostsView() {
               <div className="alert-box error">
                 <AlertCircle size={18} />
                 <span>
-                  Are you sure you want to permanently delete host{' '}
+                  Are you sure you want to delete or disable host{' '}
                   <strong>
                     &quot;{activeDeleteHost.name}&quot;
                     {activeDeleteHost.username ? ` (@${activeDeleteHost.username})` : ''}
                   </strong>{' '}
-                  from the server?
+                  on the server?
                 </span>
               </div>
               <p style={{ fontSize: '13px', color: 'var(--text-muted)' }}>
-                This will execute the live server deletion endpoint and revoke their credentials.
+                <strong>Permanent Delete:</strong> Removes the host record if they have no financial or competition history. If history exists, the server requires disabling.
+                <br />
+                <strong>Disable Host:</strong> Safely sets status to disabled, revoking access while preserving past match records.
               </p>
 
-              <div className="modal-actions">
+              <div className="modal-actions" style={{ flexWrap: 'wrap', gap: '8px' }}>
                 <button
                   type="button"
                   className="secondary"
@@ -1336,11 +1337,20 @@ export function HostsView() {
                 </button>
                 <button
                   type="button"
-                  className="danger"
-                  onClick={handleDeleteHost}
+                  className="secondary"
+                  style={{ color: 'var(--warning, #e67e22)', borderColor: 'rgba(230, 126, 34, 0.4)' }}
+                  onClick={handleDisableHost}
                   disabled={deleteLoading}
                 >
-                  {deleteLoading ? 'Deleting on Server...' : 'Delete Host'}
+                  {deleteLoading ? 'Processing...' : 'Disable Host (Safe)'}
+                </button>
+                <button
+                  type="button"
+                  className="danger"
+                  onClick={handlePermanentDeleteHost}
+                  disabled={deleteLoading}
+                >
+                  {deleteLoading ? 'Deleting on Server...' : 'Permanent Delete'}
                 </button>
               </div>
             </div>
