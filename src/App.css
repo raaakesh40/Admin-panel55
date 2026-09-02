@@ -1123,6 +1123,48 @@ button.warning:hover {
   gap: 10px;
 }
 
+.host-title-details {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.host-name-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.host-name-row h4 {
+  margin: 0;
+  font-size: 14px;
+}
+
+.host-handle-badge {
+  background: rgba(170, 59, 255, 0.12);
+  color: var(--primary, #aa3bff);
+  border: 1px solid rgba(170, 59, 255, 0.25);
+  font-size: 11px;
+  font-weight: 600;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-family: monospace;
+}
+
+.host-id-chip {
+  background: var(--surface-muted);
+  border: 1px solid var(--border-color);
+  font-size: 11px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  color: var(--text-muted);
+}
+
+.host-id-chip strong {
+  color: var(--primary, #aa3bff);
+}
+
 .host-avatar {
   background: #3b82f6;
   width: 36px;

@@ -49,6 +49,108 @@ function removeDeletedHostId(id: string) {
   }
 }
 
+function normalizeHost(raw: unknown): Host {
+  if (!raw || typeof raw !== 'object') {
+    return {
+      id: '',
+      name: 'Host',
+      status: 'active',
+      role: 'omb',
+    }
+  }
+
+  const obj = raw as Record<string, unknown>
+  const user = (obj.user && typeof obj.user === 'object' ? obj.user : {}) as Record<string, unknown>
+  const userNested = (obj.User && typeof obj.User === 'object' ? obj.User : {}) as Record<string, unknown>
+
+  const id = String(obj.id || obj._id || obj.hostId || obj.userId || user.id || userNested.id || '')
+  
+  // Extract Full Name
+  const name = String(
+    obj.name ||
+    user.name ||
+    userNested.name ||
+    obj.fullName ||
+    user.fullName ||
+    obj.username ||
+    user.username ||
+    'Host'
+  )
+
+  // Extract Username from all possible backend structures
+  const rawUsername =
+    obj.username ||
+    user.username ||
+    userNested.username ||
+    obj.userName ||
+    user.userName ||
+    obj.user_name ||
+    user.user_name ||
+    obj.host_username ||
+    user.handle ||
+    obj.handle
+
+  const username = rawUsername ? String(rawUsername).trim() : undefined
+
+  // Extract Mobile / Phone
+  const mobileNumber = String(
+    obj.mobileNumber ||
+    obj.mobile_number ||
+    obj.phone ||
+    obj.mobile ||
+    user.mobileNumber ||
+    user.mobile_number ||
+    user.phone ||
+    userNested.mobileNumber ||
+    userNested.phone ||
+    ''
+  ).trim() || undefined
+
+  // Extract UPI
+  const upiId = String(
+    obj.upiId ||
+    obj.upi_id ||
+    obj.upi ||
+    user.upiId ||
+    user.upi_id ||
+    userNested.upiId ||
+    ''
+  ).trim() || undefined
+
+  // Extract Role
+  const rawRole = String(obj.role || user.role || userNested.role || 'omb').toLowerCase()
+  const role: 'omb' | 'tournament' = rawRole.includes('tourn') ? 'tournament' : 'omb'
+
+  // Extract Status
+  const rawStatus = String(obj.status || user.status || user.accountStatus || obj.accountStatus || 'active').toLowerCase()
+  const status: 'active' | 'disabled' | 'suspended' =
+    rawStatus === 'disabled' || rawStatus === 'inactive' || rawStatus === 'suspended'
+      ? 'disabled'
+      : rawStatus === 'banned'
+      ? 'suspended'
+      : 'active'
+
+  const totalMatchesHosted = Number(
+    obj.totalMatchesHosted ?? obj.total_matches ?? obj.matchesHosted ?? obj.matches_hosted ?? 0
+  )
+  const unpaidCommission = Number(
+    obj.unpaidCommission ?? obj.unpaid_commission ?? obj.commission ?? obj.unpaid ?? 0
+  )
+
+  return {
+    id,
+    name,
+    username,
+    mobileNumber,
+    upiId,
+    role,
+    status,
+    totalMatchesHosted,
+    unpaidCommission,
+    createdAt: obj.createdAt ? String(obj.createdAt) : undefined,
+  }
+}
+
 export function HostsView() {
   const [allFetchedHosts, setAllFetchedHosts] = useState<Host[]>([])
   const [deletedIds, setDeletedIds] = useState<string[]>(getDeletedHostIds)
@@ -62,6 +164,7 @@ export function HostsView() {
   // Create Modal
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [createName, setCreateName] = useState('')
+  const [createUsername, setCreateUsername] = useState('')
   const [createMobile, setCreateMobile] = useState('')
   const [createUpiId, setCreateUpiId] = useState('')
   const [createPassword, setCreatePassword] = useState('')
@@ -72,6 +175,7 @@ export function HostsView() {
   const [showEditModal, setShowEditModal] = useState(false)
   const [editHostId, setEditHostId] = useState('')
   const [editName, setEditName] = useState('')
+  const [editUsername, setEditUsername] = useState('')
   const [editMobile, setEditMobile] = useState('')
   const [editUpiId, setEditUpiId] = useState('')
   const [editRole, setEditRole] = useState<'omb' | 'tournament'>('omb')
@@ -104,17 +208,27 @@ export function HostsView() {
       if (roleFilter !== 'all') {
         params.append('role', roleFilter)
       }
-      const data = await api<unknown>(`/hosts?${params.toString()}`)
-      let list: Host[] = []
+      
+      let data: unknown = null
+      try {
+        data = await api<unknown>(`/hosts?${params.toString()}`)
+      } catch {
+        data = await api<unknown>(`/admin/hosts?${params.toString()}`).catch(() => null)
+      }
+
+      let rawList: unknown[] = []
       if (data && typeof data === 'object') {
         const obj = data as Record<string, unknown>
         if (Array.isArray(obj.hosts)) {
-          list = obj.hosts as Host[]
+          rawList = obj.hosts
+        } else if (Array.isArray(obj.data)) {
+          rawList = obj.data
         } else if (Array.isArray(data)) {
-          list = data as Host[]
+          rawList = data
         }
       }
 
+      const list: Host[] = rawList.map(normalizeHost)
       setAllFetchedHosts(list)
       setDeletedIds(getDeletedHostIds())
     } catch (err) {
@@ -135,15 +249,25 @@ export function HostsView() {
         if (roleFilter !== 'all') {
           params.append('role', roleFilter)
         }
-        const data = await api<unknown>(`/hosts?${params.toString()}`).catch(() => null)
+        
+        let data: unknown = null
+        try {
+          data = await api<unknown>(`/hosts?${params.toString()}`)
+        } catch {
+          data = await api<unknown>(`/admin/hosts?${params.toString()}`).catch(() => null)
+        }
+
         if (isMounted && data && typeof data === 'object') {
           const obj = data as Record<string, unknown>
-          let list: Host[] = []
+          let rawList: unknown[] = []
           if (Array.isArray(obj.hosts)) {
-            list = obj.hosts as Host[]
+            rawList = obj.hosts
+          } else if (Array.isArray(obj.data)) {
+            rawList = obj.data
           } else if (Array.isArray(data)) {
-            list = data as Host[]
+            rawList = data
           }
+          const list: Host[] = rawList.map(normalizeHost)
           setAllFetchedHosts(list)
           setDeletedIds(getDeletedHostIds())
         }
@@ -167,6 +291,7 @@ export function HostsView() {
     setActionSuccess('')
 
     const name = createName.trim()
+    const username = createUsername.trim().replace(/^@/, '')
     const mobileNumber = createMobile.trim()
     const upiId = createUpiId.trim()
     const password = createPassword
@@ -182,6 +307,7 @@ export function HostsView() {
         method: 'POST',
         body: JSON.stringify({
           name,
+          username: username || undefined,
           mobileNumber,
           upiId,
           password,
@@ -192,6 +318,7 @@ export function HostsView() {
       setActionSuccess(`Host "${name}" registered successfully.`)
       setShowCreateModal(false)
       setCreateName('')
+      setCreateUsername('')
       setCreateMobile('')
       setCreateUpiId('')
       setCreatePassword('')
@@ -211,11 +338,14 @@ export function HostsView() {
     setErrorMessage('')
     setActionSuccess('')
 
+    const username = editUsername.trim().replace(/^@/, '')
+
     try {
       await api(`/admin/hosts/${editHostId}`, {
         method: 'PATCH',
         body: JSON.stringify({
           name: editName.trim(),
+          username: username || undefined,
           mobileNumber: editMobile.trim(),
           upiId: editUpiId.trim(),
           role: editRole,
@@ -380,6 +510,7 @@ export function HostsView() {
     const matchesQuery =
       !q ||
       h.name?.toLowerCase().includes(q) ||
+      h.username?.toLowerCase().includes(q) ||
       h.mobileNumber?.toLowerCase().includes(q) ||
       h.upiId?.toLowerCase().includes(q) ||
       h.id?.toLowerCase().includes(q)
@@ -509,9 +640,22 @@ export function HostsView() {
                     <div className="host-avatar">
                       {h.name ? h.name.slice(0, 1).toUpperCase() : 'H'}
                     </div>
-                    <div>
-                      <h4>{h.name}</h4>
+                    <div className="host-title-details">
+                      <div className="host-name-row">
+                        <h4>{h.name}</h4>
+                        {h.username && (
+                          <span className="host-handle-badge" title={`Host Username: @${h.username}`}>
+                            @{h.username.replace(/^@/, '')}
+                          </span>
+                        )}
+                      </div>
                       <p className="host-sub">
+                        {h.username && (
+                          <>
+                            <span className="mono-code text-purple">@{h.username.replace(/^@/, '')}</span>
+                            <span>•</span>
+                          </>
+                        )}
                         <span>{h.mobileNumber || 'No phone'}</span>
                         <span>•</span>
                         <span className="mono-code">{h.upiId || 'No UPI'}</span>
@@ -529,7 +673,14 @@ export function HostsView() {
                 </div>
 
                 <div className="host-role-row">
-                  <span className="badge-tag">{(h.role || 'omb').toUpperCase()} HOST</span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                    <span className="badge-tag">{(h.role || 'omb').toUpperCase()} HOST</span>
+                    {h.username && (
+                      <span className="host-id-chip" title="Host Username">
+                        User: <strong>@{h.username.replace(/^@/, '')}</strong>
+                      </span>
+                    )}
+                  </div>
                   <small className="mono-code muted">ID: {h.id.slice(0, 8)}...</small>
                 </div>
 
@@ -560,6 +711,7 @@ export function HostsView() {
                         onClick={() => {
                           setEditHostId(h.id)
                           setEditName(h.name || '')
+                          setEditUsername(h.username || '')
                           setEditMobile(h.mobileNumber || '')
                           setEditUpiId(h.upiId || '')
                           setEditRole((h.role === 'tournament' ? 'tournament' : 'omb'))
@@ -648,6 +800,16 @@ export function HostsView() {
               </label>
 
               <label>
+                Username (Host Handle)
+                <input
+                  type="text"
+                  placeholder="e.g. rahul_host or rahul99"
+                  value={createUsername}
+                  onChange={(e) => setCreateUsername(e.target.value)}
+                />
+              </label>
+
+              <label>
                 Mobile Number *
                 <input
                   required
@@ -726,6 +888,16 @@ export function HostsView() {
                   type="text"
                   value={editName}
                   onChange={(e) => setEditName(e.target.value)}
+                />
+              </label>
+
+              <label>
+                Username (Host Handle)
+                <input
+                  type="text"
+                  placeholder="e.g. rahul_host"
+                  value={editUsername}
+                  onChange={(e) => setEditUsername(e.target.value)}
                 />
               </label>
 
@@ -821,7 +993,10 @@ export function HostsView() {
               </p>
               <div className="info-summary-box">
                 <div>
-                  <strong>Host:</strong> {activePayHost.name}
+                  <strong>Host:</strong> {activePayHost.name}{' '}
+                  {activePayHost.username && (
+                    <span className="mono-code text-purple">(@{activePayHost.username})</span>
+                  )}
                 </div>
                 <div>
                   <strong>UPI:</strong> {activePayHost.upiId || 'N/A'}
@@ -848,7 +1023,7 @@ export function HostsView() {
         </div>
       )}
 
-      {/* PASSWORD RESET MODAL */}
+      {/* RESET PASSWORD MODAL */}
       {showResetModal && activeResetHost && (
         <div className="modal-overlay">
           <div className="modal-content">
@@ -860,10 +1035,15 @@ export function HostsView() {
             </div>
             <form onSubmit={handleResetPassword} className="modal-form">
               <p>
-                Set a new secure password for <strong>{activeResetHost.name}</strong>:
+                Set a new access password for{' '}
+                <strong>
+                  {activeResetHost.name}
+                  {activeResetHost.username ? ` (@${activeResetHost.username})` : ''}
+                </strong>
+                :
               </p>
               <label>
-                New Password *
+                New Password
                 <input
                   required
                   type="password"
@@ -877,12 +1057,16 @@ export function HostsView() {
                 <button
                   type="button"
                   className="secondary"
-                  onClick={() => setShowResetModal(false)}
+                  onClick={() => {
+                    setShowResetModal(false)
+                    setActiveResetHost(null)
+                    setResetPassInput('')
+                  }}
                 >
                   Cancel
                 </button>
                 <button type="submit" className="primary" disabled={resetLoading}>
-                  {resetLoading ? 'Resetting...' : 'Save Password'}
+                  {resetLoading ? 'Updating...' : 'Set Password'}
                 </button>
               </div>
             </form>
@@ -890,53 +1074,52 @@ export function HostsView() {
         </div>
       )}
 
-      {/* DELETE HOST CONFIRMATION MODAL */}
+      {/* DELETE CONFIRMATION MODAL */}
       {showDeleteModal && activeDeleteHost && (
-        <div className="modal-overlay" onClick={() => !deleteLoading && setShowDeleteModal(false)}>
-          <div className="modal-content modal-confirm" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-overlay">
+          <div className="modal-content">
             <div className="modal-header">
-              <div className="modal-title-wrap">
-                <Trash2 size={20} color="var(--coral-color)" />
-                <h3 style={{ color: 'var(--coral-color)' }}>Delete Host: {activeDeleteHost.name}?</h3>
-              </div>
-              <button
-                className="close-btn"
-                onClick={() => !deleteLoading && setShowDeleteModal(false)}
-                disabled={deleteLoading}
-              >
+              <h3>Delete Host Account</h3>
+              <button className="close-btn" onClick={() => setShowDeleteModal(false)}>
                 ✕
               </button>
             </div>
-
-            <div className="modal-confirm-body">
-              <p>
-                Are you sure you want to permanently delete host <strong>{activeDeleteHost.name}</strong> ({activeDeleteHost.mobileNumber || 'No phone'})?
-              </p>
-              <div className="alert-box error" style={{ margin: '12px 0 16px' }}>
-                <AlertCircle size={15} />
+            <div className="modal-form">
+              <div className="alert-box error">
+                <AlertCircle size={18} />
                 <span>
-                  Their login credentials and permissions will be permanently revoked.
+                  Are you sure you want to delete host{' '}
+                  <strong>
+                    &quot;{activeDeleteHost.name}&quot;
+                    {activeDeleteHost.username ? ` (@${activeDeleteHost.username})` : ''}
+                  </strong>
+                  ?
                 </span>
               </div>
-            </div>
+              <p style={{ fontSize: '13px', color: 'var(--text-muted)' }}>
+                This will deactivate the host credentials and remove them from active room hosting assignments.
+              </p>
 
-            <div className="modal-actions">
-              <button
-                type="button"
-                className="secondary small-btn"
-                onClick={() => setShowDeleteModal(false)}
-                disabled={deleteLoading}
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                className="danger small-btn"
-                onClick={handleDeleteHost}
-                disabled={deleteLoading}
-              >
-                {deleteLoading ? 'Deleting...' : 'Yes, Delete Host'}
-              </button>
+              <div className="modal-actions">
+                <button
+                  type="button"
+                  className="secondary"
+                  onClick={() => {
+                    setShowDeleteModal(false)
+                    setActiveDeleteHost(null)
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="danger"
+                  onClick={handleDeleteHost}
+                  disabled={deleteLoading}
+                >
+                  {deleteLoading ? 'Deleting...' : 'Delete Host'}
+                </button>
+              </div>
             </div>
           </div>
         </div>
