@@ -19,14 +19,9 @@ import {
   Hash,
 } from 'lucide-react'
 
-function normalizeHost(raw: unknown): Host {
+function normalizeHost(raw: unknown): Host | null {
   if (!raw || typeof raw !== 'object') {
-    return {
-      id: '',
-      name: 'Host',
-      status: 'active',
-      role: 'omb',
-    }
+    return null
   }
 
   const obj = raw as Record<string, unknown>
@@ -35,6 +30,30 @@ function normalizeHost(raw: unknown): Host {
   const hostObj = (obj.host && typeof obj.host === 'object' ? obj.host : {}) as Record<string, unknown>
   const profile = (obj.profile && typeof obj.profile === 'object' ? obj.profile : {}) as Record<string, unknown>
   const account = (obj.account && typeof obj.account === 'object' ? obj.account : {}) as Record<string, unknown>
+
+  // Check if permanently or soft-deleted on server
+  const isDeleted = Boolean(
+    obj.isDeleted ||
+    obj.is_deleted ||
+    obj.deleted ||
+    obj.deletedAt ||
+    obj.deleted_at ||
+    user.isDeleted ||
+    user.is_deleted ||
+    user.deleted ||
+    user.deletedAt ||
+    user.deleted_at ||
+    obj.status === 'deleted' ||
+    user.status === 'deleted' ||
+    obj.accountStatus === 'deleted' ||
+    user.accountStatus === 'deleted' ||
+    obj.status === 'removed' ||
+    user.status === 'removed'
+  )
+
+  if (isDeleted) {
+    return null
+  }
 
   const id = String(
     obj.id ||
@@ -46,6 +65,10 @@ function normalizeHost(raw: unknown): Host {
     hostObj.id ||
     ''
   )
+
+  if (!id) {
+    return null
+  }
   
   // Extract Full Name
   const name = String(
@@ -198,7 +221,12 @@ export function HostsView() {
     setErrorMessage('')
     try {
       const params = new URLSearchParams()
-      params.append('includeDisabled', 'true')
+      if (statusFilter === 'disabled') {
+        params.append('includeDisabled', 'true')
+        params.append('status', 'disabled')
+      } else if (statusFilter === 'active') {
+        params.append('status', 'active')
+      }
       if (roleFilter !== 'all') {
         params.append('role', roleFilter)
       }
@@ -222,7 +250,9 @@ export function HostsView() {
         }
       }
 
-      const list: Host[] = rawList.map(normalizeHost)
+      const list: Host[] = rawList
+        .map(normalizeHost)
+        .filter((h): h is Host => h !== null && Boolean(h.id))
       setAllFetchedHosts(list)
     } catch (err) {
       setErrorMessage(err instanceof Error ? err.message : 'Failed to fetch hosts list from server.')
@@ -238,7 +268,12 @@ export function HostsView() {
       setLoading(true)
       try {
         const params = new URLSearchParams()
-        params.append('includeDisabled', 'true')
+        if (statusFilter === 'disabled') {
+          params.append('includeDisabled', 'true')
+          params.append('status', 'disabled')
+        } else if (statusFilter === 'active') {
+          params.append('status', 'active')
+        }
         if (roleFilter !== 'all') {
           params.append('role', roleFilter)
         }
@@ -260,7 +295,9 @@ export function HostsView() {
           } else if (Array.isArray(data)) {
             rawList = data
           }
-          const list: Host[] = rawList.map(normalizeHost)
+          const list: Host[] = rawList
+            .map(normalizeHost)
+            .filter((h): h is Host => h !== null && Boolean(h.id))
           setAllFetchedHosts(list)
         }
       } finally {
@@ -273,7 +310,7 @@ export function HostsView() {
     return () => {
       isMounted = false
     }
-  }, [roleFilter])
+  }, [roleFilter, statusFilter])
 
   // Helper to build normalized payload covering all possible backend ORM & naming conventions
   function buildHostPayload(params: {
@@ -607,13 +644,19 @@ export function HostsView() {
 
       // Attempt permanent deletion on real server
       const deleteAttempts = [
+        { path: `/admin/hosts/${encodeURIComponent(targetId)}?force=true&permanent=true&hard=true`, method: 'DELETE' },
         { path: `/admin/hosts/${encodeURIComponent(targetId)}`, method: 'DELETE' },
+        { path: `/hosts/${encodeURIComponent(targetId)}?force=true&permanent=true&hard=true`, method: 'DELETE' },
         { path: `/hosts/${encodeURIComponent(targetId)}`, method: 'DELETE' },
-        { path: `/admin/hosts/${encodeURIComponent(targetId)}/delete`, method: 'POST' },
-        { path: `/hosts/${encodeURIComponent(targetId)}/delete`, method: 'POST' },
-        { path: `/admin/hosts/delete`, method: 'POST', body: JSON.stringify({ id: targetId, hostId: targetId }) },
-        { path: `/admin/hosts`, method: 'DELETE', body: JSON.stringify({ id: targetId, hostId: targetId }) },
+        { path: `/admin/users/${encodeURIComponent(targetId)}?force=true&permanent=true&hard=true`, method: 'DELETE' },
         { path: `/admin/users/${encodeURIComponent(targetId)}`, method: 'DELETE' },
+        { path: `/admin/competition/hosts/${encodeURIComponent(targetId)}`, method: 'DELETE' },
+        { path: `/admin/hosts/${encodeURIComponent(targetId)}/delete`, method: 'POST', body: JSON.stringify({ force: true, permanent: true, hard: true, id: targetId, hostId: targetId }) },
+        { path: `/hosts/${encodeURIComponent(targetId)}/delete`, method: 'POST', body: JSON.stringify({ force: true, permanent: true, hard: true, id: targetId, hostId: targetId }) },
+        { path: `/admin/hosts/delete`, method: 'POST', body: JSON.stringify({ id: targetId, hostId: targetId, force: true, permanent: true, hard: true }) },
+        { path: `/admin/hosts/remove`, method: 'POST', body: JSON.stringify({ id: targetId, hostId: targetId, force: true, permanent: true, hard: true }) },
+        { path: `/admin/users/delete`, method: 'POST', body: JSON.stringify({ id: targetId, userId: targetId, force: true, permanent: true, hard: true }) },
+        { path: `/admin/hosts`, method: 'DELETE', body: JSON.stringify({ id: targetId, hostId: targetId, force: true, permanent: true, hard: true }) },
       ]
 
       for (const att of deleteAttempts) {
