@@ -231,7 +231,7 @@ export function HostsView() {
       await api(`/admin/hosts/${activePayHost.id}/pay`, {
         method: 'POST',
       })
-      setActionSuccess(`Host payout marked as paid on /api/admin/hosts/${activePayHost.id}/pay.`)
+      setActionSuccess(`Host payout marked as settled successfully.`)
       setShowPayModal(false)
       setActivePayHost(null)
       await fetchHosts()
@@ -242,7 +242,7 @@ export function HostsView() {
     }
   }
 
-  // 5) Reset Password: POST /api/admin/hosts/:id/password-reset
+  // 5) Reset Password
   async function handleResetPassword(e: FormEvent) {
     e.preventDefault()
     if (!activeResetHost || !resetPassInput) return
@@ -266,7 +266,7 @@ export function HostsView() {
     }
   }
 
-  // Delete Host: DELETE /api/admin/hosts/:id
+  // Delete Host
   function promptDeleteHost(h: Host) {
     setActiveDeleteHost(h)
     setShowDeleteModal(true)
@@ -322,7 +322,7 @@ export function HostsView() {
       <div className="view-header">
         <div>
           <h2>Hosts Management</h2>
-          <p>Strict backend integration for host accounts, status, settlements & credentials</p>
+          <p>Manage room host accounts, match assignments, settlements, and credentials</p>
         </div>
         <div className="header-actions">
           <button className="primary small-btn" onClick={() => setShowCreateModal(true)}>
@@ -365,7 +365,7 @@ export function HostsView() {
             className="secondary small-btn icon-only"
             onClick={fetchHosts}
             disabled={loading}
-            title="Refresh hosts list from backend"
+            title="Refresh hosts list"
           >
             <RefreshCw size={14} className={loading ? 'spinning' : ''} />
           </button>
@@ -389,7 +389,7 @@ export function HostsView() {
       {loading ? (
         <div className="loading-card">
           <RefreshCw size={24} className="spinning" color="#aa3bff" />
-          <p>Querying /api/hosts from server...</p>
+          <p>Loading verified host accounts...</p>
         </div>
       ) : filteredHosts.length === 0 ? (
         <div className="state-card">
@@ -398,7 +398,7 @@ export function HostsView() {
           </div>
           <h3>No Hosts Found</h3>
           <p className="state-desc">
-            No hosts matched your query on <code>/api/hosts</code>. Click below to add a new verified room host.
+            No hosts matched your query. Click below to add a new verified room host.
           </p>
           <button className="primary small-btn" onClick={() => setShowCreateModal(true)}>
             <Plus size={14} /> Add First Host
@@ -457,7 +457,7 @@ export function HostsView() {
                       setEditStatus(isActive ? 'active' : 'disabled')
                       setShowEditModal(true)
                     }}
-                    title="Edit host (PATCH /api/admin/hosts/:id)"
+                    title="Edit host details"
                   >
                     <Edit2 size={13} /> Edit
                   </button>
@@ -468,7 +468,7 @@ export function HostsView() {
                       setActiveResetHost(h)
                       setShowResetModal(true)
                     }}
-                    title="Reset Password (POST /api/admin/hosts/:id/password-reset)"
+                    title="Reset host password"
                   >
                     <Key size={13} /> Password
                   </button>
@@ -479,7 +479,7 @@ export function HostsView() {
                       setActivePayHost(h)
                       setShowPayModal(true)
                     }}
-                    title="Mark paid (POST /api/admin/hosts/:id/pay)"
+                    title="Settle unpaid commission"
                   >
                     <CreditCard size={13} /> Settle
                   </button>
@@ -487,7 +487,7 @@ export function HostsView() {
                   <button
                     className={`${isActive ? 'danger' : 'success'} small-btn`}
                     onClick={() => handleToggleStatus(h)}
-                    title="Toggle Status (PATCH /api/admin/hosts/:id/status)"
+                    title="Toggle host account status"
                   >
                     {isActive ? 'Disable' : 'Enable'}
                   </button>
@@ -506,12 +506,12 @@ export function HostsView() {
         </div>
       )}
 
-      {/* CREATE HOST MODAL: POST /api/admin/hosts */}
+      {/* CREATE HOST MODAL */}
       {showCreateModal && (
         <div className="modal-overlay">
           <div className="modal-content">
             <div className="modal-header">
-              <h3>Register Host (POST /api/admin/hosts)</h3>
+              <h3>Register New Host</h3>
               <button className="close-btn" onClick={() => setShowCreateModal(false)}>
                 ✕
               </button>
@@ -589,12 +589,12 @@ export function HostsView() {
         </div>
       )}
 
-      {/* EDIT HOST MODAL: PATCH /api/admin/hosts/:id */}
+      {/* EDIT HOST MODAL */}
       {showEditModal && (
         <div className="modal-overlay">
           <div className="modal-content">
             <div className="modal-header">
-              <h3>Edit Host (PATCH /api/admin/hosts/:id)</h3>
+              <h3>Edit Host Details</h3>
               <button className="close-btn" onClick={() => setShowEditModal(false)}>
                 ✕
               </button>
@@ -669,7 +669,7 @@ export function HostsView() {
         </div>
       )}
 
-      {/* PAY MODAL: POST /api/admin/hosts/:id/pay */}
+      {/* PAY MODAL */}
       {showPayModal && activePayHost && (
         <div className="modal-overlay">
           <div className="modal-content">
@@ -681,7 +681,7 @@ export function HostsView() {
             </div>
             <form onSubmit={handleSettlePayment} className="modal-form">
               <p>
-                Confirm marking host commission as paid via <code>POST /api/admin/hosts/{activePayHost.id}/pay</code>:
+                Confirm settling host payout balance for this billing period:
               </p>
               <div className="info-summary-box">
                 <div>
@@ -712,7 +712,7 @@ export function HostsView() {
         </div>
       )}
 
-      {/* PASSWORD RESET MODAL: POST /api/admin/hosts/:id/password-reset */}
+      {/* PASSWORD RESET MODAL */}
       {showResetModal && activeResetHost && (
         <div className="modal-overlay">
           <div className="modal-content">
@@ -724,7 +724,7 @@ export function HostsView() {
             </div>
             <form onSubmit={handleResetPassword} className="modal-form">
               <p>
-                Reset credentials for <strong>{activeResetHost.name}</strong> on <code>/api/admin/hosts/{activeResetHost.id}/password-reset</code>:
+                Set a new secure password for <strong>{activeResetHost.name}</strong>:
               </p>
               <label>
                 New Password *
@@ -754,7 +754,7 @@ export function HostsView() {
         </div>
       )}
 
-      {/* DELETE HOST CONFIRMATION MODAL: DELETE /api/admin/hosts/:id */}
+      {/* DELETE HOST CONFIRMATION MODAL */}
       {showDeleteModal && activeDeleteHost && (
         <div className="modal-overlay" onClick={() => !deleteLoading && setShowDeleteModal(false)}>
           <div className="modal-content modal-confirm" onClick={(e) => e.stopPropagation()}>
@@ -774,12 +774,12 @@ export function HostsView() {
 
             <div className="modal-confirm-body">
               <p>
-                Are you sure you want to permanently delete host <strong>{activeDeleteHost.name}</strong> (Phone: <code>{activeDeleteHost.mobileNumber || 'N/A'}</code>, ID: <code>{activeDeleteHost.id}</code>)?
+                Are you sure you want to permanently delete host <strong>{activeDeleteHost.name}</strong> ({activeDeleteHost.mobileNumber || 'No phone'})?
               </p>
               <div className="alert-box error" style={{ margin: '12px 0 16px' }}>
                 <AlertCircle size={15} />
                 <span>
-                  This calls <code>DELETE /api/admin/hosts/{activeDeleteHost.id}</code>. Their login credentials and permissions will be permanently revoked.
+                  Their login credentials and permissions will be permanently revoked.
                 </span>
               </div>
             </div>

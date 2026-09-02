@@ -41,22 +41,22 @@ export function UsersView() {
     try {
       const clean = query.trim()
       const isPhone = /^[0-9+]{5,15}$/.test(clean)
-      const param逃 = isPhone ? `mobileNumber=${encodeURIComponent(clean)}` : `q=${encodeURIComponent(clean)}`
+      const param = isPhone ? `mobileNumber=${encodeURIComponent(clean)}` : `q=${encodeURIComponent(clean)}`
       
-      const data = await api<unknown>(`/operations/users/search?${param逃}`)
+      const data = await api<unknown>(`/operations/users/search?${param}`)
       
       let userObj: Record<string, unknown> | null = null
       if (data && typeof data === 'object') {
-        const d加 = data as Record<string, unknown>
-        if (Array.isArray(d加.users) && d加.users.length > 0) {
-          userObj = d加.users[0] as Record<string, unknown>
+        const d = data as Record<string, unknown>
+        if (Array.isArray(d.users) && d.users.length > 0) {
+          userObj = d.users[0] as Record<string, unknown>
         } else if (Array.isArray(data) && (data as unknown[]).length > 0) {
           userObj = (data as unknown[])[0] as Record<string, unknown>
-        } else if (d加.user && typeof d加.user === 'object') {
-          setResult(d加 as unknown as UserResult)
+        } else if (d.user && typeof d.user === 'object') {
+          setResult(d as unknown as UserResult)
           return
-        } else if (d加.id || d加.username || d加.mobileNumber) {
-          userObj = d加
+        } else if (d.id || d.username || d.mobileNumber) {
+          userObj = d
         }
       }
 

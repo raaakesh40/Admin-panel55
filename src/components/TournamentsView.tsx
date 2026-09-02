@@ -1218,7 +1218,7 @@ export function TournamentsView({ initialGameId }: TournamentsViewProps) {
 
             <form onSubmit={handleCreateMode} className="modal-form">
               <p className="form-info-text">
-                Defines the competition rules, scoring metric, and prize pool for tournament leagues. Stored permanently on <code>POST /api/admin/competition/modes</code>.
+                Define competition rules, scoring metric, and prize pool structure for tournament leagues.
               </p>
 
               <label>
@@ -1553,7 +1553,7 @@ export function TournamentsView({ initialGameId }: TournamentsViewProps) {
 
             <form onSubmit={handleCreateSchedule} className="modal-form">
               <p className="form-info-text">
-                Creates an operational tournament launch timing instance on <code>POST /api/admin/competition/schedules</code>. Configuration (fee, slots, metric, prize ladder) is inherited directly from the Tournament Mode.
+                Create an operational tournament schedule slot with entry close timing and duration. Rules and prizes are inherited directly from the tournament mode.
               </p>
 
               <label>
@@ -1703,12 +1703,12 @@ export function TournamentsView({ initialGameId }: TournamentsViewProps) {
 
             <div className="modal-confirm-body">
               <p>
-                Are you sure you want to permanently delete tournament mode <strong>{modeToDelete.name}</strong> (ID: <code>{modeToDelete.id}</code>)?
+                Are you sure you want to permanently delete tournament mode <strong>{modeToDelete.name}</strong>?
               </p>
               <div className="alert-box error" style={{ margin: '12px 0 16px' }}>
                 <AlertCircle size={15} />
                 <span>
-                  This calls <code>DELETE /api/admin/competition/modes/{modeToDelete.id}</code>. Any active tournament schedule slots linked to this mode will also be deleted.
+                  Any active tournament schedule slots linked to this mode will also be deleted.
                 </span>
               </div>
             </div>
@@ -1757,12 +1757,12 @@ export function TournamentsView({ initialGameId }: TournamentsViewProps) {
 
             <div className="modal-confirm-body">
               <p>
-                Are you sure you want to delete this tournament slot (ID: <code>{scheduleToDelete.id}</code>)?
+                Are you sure you want to delete this tournament slot?
               </p>
               <div className="alert-box error" style={{ margin: '12px 0 16px' }}>
                 <AlertCircle size={15} />
                 <span>
-                  This calls <code>DELETE /api/admin/competition/schedules/{scheduleToDelete.id}</code>.
+                  This will remove this tournament schedule slot from active operations.
                 </span>
               </div>
             </div>

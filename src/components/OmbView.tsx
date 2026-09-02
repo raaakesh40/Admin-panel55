@@ -1175,7 +1175,7 @@ export function OmbView({ initialGameId }: OmbViewProps) {
 
             <form onSubmit={handleCreateMode} className="modal-form">
               <p className="form-info-text">
-                Defines the competition rules and prize ladder for OMB matches (1v1 / quick matches). Stored permanently on <code>POST /api/admin/competition/modes</code>.
+                Define competition rules, participant capacity, entry fees, and prize ladder for OMB (1v1) matches.
               </p>
 
               <label>
@@ -1489,7 +1489,7 @@ export function OmbView({ initialGameId }: OmbViewProps) {
 
             <form onSubmit={handleCreateSchedule} className="modal-form">
               <p className="form-info-text">
-                Creates an operational launch timing instance on <code>POST /api/admin/competition/schedules</code>. Configuration (fee, slots, prize ladder) is inherited directly from the Mode.
+                Create an operational match schedule slot with specific start time and room reveal offsets. Configuration and prize structures are inherited from the selected mode.
               </p>
 
               <label>
@@ -1639,12 +1639,12 @@ export function OmbView({ initialGameId }: OmbViewProps) {
 
             <div className="modal-confirm-body">
               <p>
-                Are you sure you want to permanently delete OMB mode <strong>{modeToDelete.name}</strong> (ID: <code>{modeToDelete.id}</code>)?
+                Are you sure you want to permanently delete OMB mode <strong>{modeToDelete.name}</strong>?
               </p>
               <div className="alert-box error" style={{ margin: '12px 0 16px' }}>
                 <AlertCircle size={15} />
                 <span>
-                  This calls <code>DELETE /api/admin/competition/modes/{modeToDelete.id}</code>. Any active match schedule slots tied to this mode will also be removed.
+                  Any active match schedule slots tied to this mode will also be removed.
                 </span>
               </div>
             </div>
@@ -1693,12 +1693,12 @@ export function OmbView({ initialGameId }: OmbViewProps) {
 
             <div className="modal-confirm-body">
               <p>
-                Are you sure you want to delete this OMB match slot (ID: <code>{scheduleToDelete.id}</code>)?
+                Are you sure you want to delete this OMB match slot?
               </p>
               <div className="alert-box error" style={{ margin: '12px 0 16px' }}>
                 <AlertCircle size={15} />
                 <span>
-                  This calls <code>DELETE /api/admin/competition/schedules/{scheduleToDelete.id}</code>.
+                  This will remove this scheduled match slot from active operations.
                 </span>
               </div>
             </div>

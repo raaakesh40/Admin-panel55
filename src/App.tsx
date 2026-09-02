@@ -49,7 +49,7 @@ export function App() {
     }
     return null
   })
-  const [login, setLogin] = useState({ username: 'admin_niha', password: '' })
+  const [login, setLogin] = useState({ username: '', password: '' })
   const [showPassword, setShowPassword] = useState(false)
   const [loginError, setLoginError] = useState('')
   const [loginLoading, setLoginLoading] = useState(false)
@@ -336,7 +336,7 @@ export function App() {
           <p>Admin console access for platform operations, live competitions, host settlements, and account audits.</p>
           <div className="login-art-footer">
             <span className="live-dot" />
-            <small>Connected to AWS Backend: https://api.pagewoga.online</small>
+            <small>Enterprise Security & Data Protection</small>
           </div>
         </div>
 
@@ -356,7 +356,8 @@ export function App() {
               id="login-username"
               value={login.username}
               onChange={(e) => setLogin({ ...login, username: e.target.value })}
-              placeholder="admin_niha"
+              placeholder="Enter username"
+              autoComplete="username"
             />
           </label>
 
@@ -389,7 +390,7 @@ export function App() {
           <button className="primary full" type="submit" disabled={loginLoading}>
             {loginLoading ? 'Authenticating...' : 'Sign in to Admin Console'} <span>→</span>
           </button>
-          <small>Production Server: https://api.pagewoga.online</small>
+          <small>Protected Administrative Console</small>
         </form>
       </main>
     )
@@ -460,9 +461,9 @@ export function App() {
         <div className="sidebar-foot">
           <div className="secure-dot" />
           <span>
-            Server: Connected
+            System Status: Active
             <br />
-            <small>api.pagewoga.online</small>
+            <small>Pagewoga Operations</small>
           </span>
         </div>
       </aside>

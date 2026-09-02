@@ -174,7 +174,7 @@ export function NotificationsView() {
       setMessage('')
       await fetchHistoryFromDB()
     } catch (err) {
-      setErrorMessage(err instanceof Error ? err.message : 'Database error: Failed to send broadcast.')
+      setErrorMessage(err instanceof Error ? err.message : 'Failed to send broadcast.')
     } finally {
       setLoading(false)
     }
@@ -191,7 +191,7 @@ export function NotificationsView() {
           className="secondary small-btn"
           onClick={fetchHistoryFromDB}
           disabled={historyLoading}
-          title="Refresh notification history from database"
+          title="Refresh history"
         >
           <RefreshCw size={14} className={historyLoading ? 'spinning' : ''} />
         </button>
@@ -326,12 +326,12 @@ export function NotificationsView() {
           {historyLoading ? (
             <div className="loading-inline">
               <RefreshCw size={16} className="spinning" color="#aa3bff" />
-              <span>Loading from database...</span>
+              <span>Loading history...</span>
             </div>
           ) : history.length === 0 ? (
             <div className="empty-history-box">
               <Bell size={24} color="#888" />
-              <p className="history-empty">No broadcast history in database.</p>
+              <p className="history-empty">No broadcast history found.</p>
             </div>
           ) : (
             <div className="history-list">

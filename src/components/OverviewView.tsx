@@ -224,7 +224,7 @@ export function OverviewView({
       <div className="welcome-banner">
         <div>
           <h2>Competition Platform Overview</h2>
-          <p>Real-time status of Games, Modes (Config), and Schedules (Timing)</p>
+          <p>Overview of active games, match modes, schedules, and player activity</p>
         </div>
         <div className="live-status-badge">
           <span className="live-dot" />
@@ -300,7 +300,7 @@ export function OverviewView({
         </div>
 
         <span className="muted-count">
-          Showing {filteredSchedules.length} of {schedules.length} schedule instances
+          Showing {filteredSchedules.length} of {schedules.length} match schedules
         </span>
       </div>
 

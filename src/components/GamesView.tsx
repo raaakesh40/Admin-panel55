@@ -420,7 +420,7 @@ export function GamesView({ onNavigateToOmb, onNavigateToTournament }: GamesView
       {loading && games.length === 0 ? (
         <div className="loading-card">
           <RefreshCw size={24} className="spinning" color="#3b82f6" />
-          <p>Loading master games from /api/competitions/games...</p>
+          <p>Loading game catalog...</p>
         </div>
       ) : filteredGames.length === 0 ? (
         <div className="state-card">
@@ -555,7 +555,7 @@ export function GamesView({ onNavigateToOmb, onNavigateToTournament }: GamesView
 
             <form onSubmit={handleCreateGame} className="modal-form">
               <p className="form-info-text">
-                Creates a game catalog item on <code>POST /api/admin/competition/games</code>. Competition rules (OMB/Tournament) are defined separately in their respective domains.
+                Add a new title to the platform game catalog. You can configure OMB and Tournament modes for this game once added.
               </p>
 
               <label>
@@ -617,7 +617,7 @@ export function GamesView({ onNavigateToOmb, onNavigateToTournament }: GamesView
 
             <form onSubmit={handleUpdateGame} className="modal-form">
               <p className="form-info-text">
-                Updates game catalog item on <code>PATCH /api/admin/competition/games/{editingGame.id}</code>.
+                Update game catalog details and active status.
               </p>
 
               <label>
@@ -706,12 +706,12 @@ export function GamesView({ onNavigateToOmb, onNavigateToTournament }: GamesView
 
             <div className="modal-confirm-body">
               <p>
-                Are you sure you want to permanently delete <strong>{gameToDelete.name}</strong> (ID: <code>{gameToDelete.id}</code>)?
+                Are you sure you want to permanently delete <strong>{gameToDelete.name}</strong>?
               </p>
               <div className="alert-box error" style={{ margin: '12px 0 16px' }}>
                 <AlertCircle size={15} />
                 <span>
-                  This action calls <code>DELETE /api/admin/competition/games/{gameToDelete.id}</code>. If this game has active OMB or Tournament modes, you must delete those modes first.
+                  If this game has active OMB or Tournament modes, you must delete those modes first before deleting this game.
                 </span>
               </div>
             </div>

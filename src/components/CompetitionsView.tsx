@@ -103,7 +103,7 @@ export function CompetitionsView() {
 
       setCompetitionsList(uniqueComps)
     } catch (err) {
-      setErrorMessage(err instanceof Error ? err.message : 'Failed to query database for matches.')
+      setErrorMessage(err instanceof Error ? err.message : 'Failed to load matches.')
       setCompetitionsList([])
     } finally {
       setListLoading(false)
@@ -185,13 +185,13 @@ export function CompetitionsView() {
         if (normalized) {
           setSearchResult(normalized)
         } else {
-          setErrorMessage(`No match found in database for "${clean}".`)
+          setErrorMessage(`No match found for "${clean}".`)
         }
       } else {
-        setErrorMessage(`No match found in database for "${clean}".`)
+        setErrorMessage(`No match found for "${clean}".`)
       }
     } catch (e) {
-      setErrorMessage(e instanceof Error ? e.message : 'Match not found in database.')
+      setErrorMessage(e instanceof Error ? e.message : 'Match not found.')
     } finally {
       setLoading(false)
     }
@@ -214,11 +214,11 @@ export function CompetitionsView() {
         }),
       })
 
-      setActionSuccess(`Room credentials saved to database for match ${activeRoomMatch.code}.`)
+      setActionSuccess(`Room credentials saved for match ${activeRoomMatch.code}.`)
       setActiveRoomMatch(null)
       await fetchCompetitionsList()
     } catch (err) {
-      setErrorMessage(err instanceof Error ? err.message : 'Database error: Failed to update room.')
+      setErrorMessage(err instanceof Error ? err.message : 'Failed to update room credentials.')
     } finally {
       setRoomLoading(false)
     }
@@ -241,13 +241,13 @@ export function CompetitionsView() {
       <div className="view-header">
         <div>
           <h2>Matches</h2>
-          <p>Live matches & tournaments from database</p>
+          <p>Live matches, custom rooms, and tournament schedules</p>
         </div>
         <button
           className="secondary small-btn"
           onClick={fetchCompetitionsList}
           disabled={listLoading}
-          title="Refresh matches from database"
+          title="Refresh matches"
         >
           <RefreshCw size={14} className={listLoading ? 'spinning' : ''} />
         </button>
@@ -259,13 +259,13 @@ export function CompetitionsView() {
           <input
             required
             type="text"
-            placeholder="Search Match ID or Code in database..."
+            placeholder="Search Match ID or Code..."
             value={identifier}
             onChange={(e) => setIdentifier(e.target.value)}
           />
         </div>
         <button className="primary" type="submit" disabled={loading}>
-          {loading ? 'Searching DB...' : 'Search'}
+          {loading ? 'Searching...' : 'Search'}
         </button>
       </form>
 
@@ -374,16 +374,16 @@ export function CompetitionsView() {
       {listLoading ? (
         <div className="loading-card">
           <RefreshCw size={24} className="spinning" color="#aa3bff" />
-          <p>Querying database matches...</p>
+          <p>Loading matches...</p>
         </div>
       ) : filteredMatches.length === 0 ? (
         <div className="state-card">
           <div className="state-icon">
             <Trophy size={32} color="#ffa800" />
           </div>
-          <h3>No Matches in Database</h3>
+          <h3>No Matches Found</h3>
           <p className="state-desc">
-            No active competitions found in the database. When players or hosts schedule matches, they will appear here in real time.
+            No active competitions scheduled at this time. When matches are created, they will appear here.
           </p>
         </div>
       ) : (
@@ -481,7 +481,7 @@ export function CompetitionsView() {
                   Cancel
                 </button>
                 <button type="submit" className="primary" disabled={roomLoading}>
-                  {roomLoading ? 'Saving to Database...' : 'Save Room'}
+                  {roomLoading ? 'Saving...' : 'Save Room'}
                 </button>
               </div>
             </form>
