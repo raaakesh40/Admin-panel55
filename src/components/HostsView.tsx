@@ -39,12 +39,23 @@ function addDeletedHostId(id: string) {
   }
 }
 
+function removeDeletedHostId(id: string) {
+  try {
+    const current = getDeletedHostIds()
+    const updated = current.filter((x) => x !== id)
+    localStorage.setItem(DELETED_HOSTS_KEY, JSON.stringify(updated))
+  } catch {
+    // ignore
+  }
+}
+
 export function HostsView() {
-  const [hosts, setHosts] = useState<Host[]>([])
+  const [allFetchedHosts, setAllFetchedHosts] = useState<Host[]>([])
+  const [deletedIds, setDeletedIds] = useState<string[]>(getDeletedHostIds)
   const [loading, setLoading] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const [roleFilter, setRoleFilter] = useState<'all' | 'omb' | 'tournament'>('all')
-  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'disabled'>('all')
+  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'disabled' | 'deleted'>('all')
   const [actionSuccess, setActionSuccess] = useState('')
   const [errorMessage, setErrorMessage] = useState('')
 
@@ -104,18 +115,8 @@ export function HostsView() {
         }
       }
 
-      const deletedIds = getDeletedHostIds()
-      const cleaned = list.filter((h) => {
-        if (!h || !h.id) return false
-        if (deletedIds.includes(h.id)) return false
-        const s = (h.status || '').toLowerCase()
-        if (s === 'deleted') return false
-        const ext = h as { isDeleted?: boolean; deleted?: boolean }
-        if (ext.isDeleted === true || ext.deleted === true) return false
-        return true
-      })
-
-      setHosts(cleaned)
+      setAllFetchedHosts(list)
+      setDeletedIds(getDeletedHostIds())
     } catch (err) {
       setErrorMessage(err instanceof Error ? err.message : 'Failed to fetch hosts list.')
     } finally {
@@ -143,17 +144,8 @@ export function HostsView() {
           } else if (Array.isArray(data)) {
             list = data as Host[]
           }
-          const deletedIds = getDeletedHostIds()
-          const cleaned = list.filter((h) => {
-            if (!h || !h.id) return false
-            if (deletedIds.includes(h.id)) return false
-            const s = (h.status || '').toLowerCase()
-            if (s === 'deleted') return false
-            const ext = h as { isDeleted?: boolean; deleted?: boolean }
-            if (ext.isDeleted === true || ext.deleted === true) return false
-            return true
-          })
-          setHosts(cleaned)
+          setAllFetchedHosts(list)
+          setDeletedIds(getDeletedHostIds())
         }
       } finally {
         if (isMounted) setLoading(false)
@@ -322,45 +314,34 @@ export function HostsView() {
     setActionSuccess('')
 
     try {
-      // Attempt backend delete endpoints
+      // Execute backend DELETE endpoint: DELETE /api/admin/hosts/:id
       try {
         await api(`/admin/hosts/${targetId}`, {
           method: 'DELETE',
         })
-      } catch {
+      } catch (callErr) {
         try {
           await api(`/hosts/${targetId}`, {
             method: 'DELETE',
           })
         } catch {
-          try {
-            await api(`/admin/hosts/${targetId}/delete`, {
-              method: 'POST',
-            })
-          } catch {
-            try {
-              await api(`/admin/hosts/${targetId}/status`, {
-                method: 'PATCH',
-                body: JSON.stringify({ status: 'deleted' }),
-              })
-            } catch {
-              // Fallback
-            }
-          }
+          // Backend soft-delete or error fallback
+          console.warn('DELETE host fallback notice:', callErr)
         }
       }
 
-      // Record ID permanently so it is never displayed again
+      // Record ID permanently in deletedIds store
       addDeletedHostId(targetId)
+      setDeletedIds(getDeletedHostIds())
 
-      // Immediately purge from frontend state
-      setHosts((prev) => prev.filter((h) => h.id !== targetId))
+      // Immediately purge from frontend display
+      setAllFetchedHosts((prev) => prev.filter((h) => h.id !== targetId))
 
       setActionSuccess(`Host account "${targetName}" has been permanently deleted.`)
       setShowDeleteModal(false)
       setActiveDeleteHost(null)
       
-      // Refresh list to sync remaining records
+      // Sync list
       await fetchHosts()
     } catch (err) {
       setErrorMessage(err instanceof Error ? err.message : 'Failed to delete host account.')
@@ -369,7 +350,39 @@ export function HostsView() {
     }
   }
 
-  const filteredHosts = hosts.filter((h) => {
+  // 7) Restore Host from Deleted (Trash)
+  async function handleRestoreHost(host: Host) {
+    setLoading(true)
+    setErrorMessage('')
+    setActionSuccess('')
+    try {
+      removeDeletedHostId(host.id)
+      setDeletedIds(getDeletedHostIds())
+
+      try {
+        await api(`/admin/hosts/${host.id}/status`, {
+          method: 'PATCH',
+          body: JSON.stringify({ status: 'active' }),
+        })
+      } catch {
+        // status patch fallback
+      }
+
+      setActionSuccess(`Host "${host.name}" has been restored to Active status.`)
+      await fetchHosts()
+    } catch (err) {
+      setErrorMessage(err instanceof Error ? err.message : 'Failed to restore host.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // Filter hosts based on search and status/deleted tab
+  const filteredHosts = allFetchedHosts.filter((h) => {
+    if (!h || !h.id) return false
+    const isDeleted = deletedIds.includes(h.id) || (h.status || '').toLowerCase() === 'deleted'
+    const isActive = (h.status || 'active').toLowerCase() === 'active'
+
     const q = searchQuery.toLowerCase().trim()
     const matchesQuery =
       !q ||
@@ -378,12 +391,24 @@ export function HostsView() {
       h.upiId?.toLowerCase().includes(q) ||
       h.id?.toLowerCase().includes(q)
 
-    const matchesStatus =
-      statusFilter === 'all' ||
-      (statusFilter === 'active' && (h.status || 'active').toLowerCase() === 'active') ||
-      (statusFilter === 'disabled' && (h.status || '').toLowerCase() !== 'active')
+    if (!matchesQuery) return false
 
-    return matchesQuery && matchesStatus
+    if (statusFilter === 'deleted') {
+      return isDeleted
+    }
+
+    // For all, active, disabled: ignore deleted hosts completely
+    if (isDeleted) return false
+
+    if (statusFilter === 'active') {
+      return isActive
+    }
+
+    if (statusFilter === 'disabled') {
+      return !isActive
+    }
+
+    return true
   })
 
   return (
@@ -423,11 +448,12 @@ export function HostsView() {
 
           <select
             value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value as 'all' | 'active' | 'disabled')}
+            onChange={(e) => setStatusFilter(e.target.value as 'all' | 'active' | 'disabled' | 'deleted')}
           >
             <option value="all">All Status</option>
             <option value="active">Active Only</option>
             <option value="disabled">Disabled Only</option>
+            <option value="deleted">Deleted Hosts (Trash)</option>
           </select>
 
           <button
@@ -465,17 +491,23 @@ export function HostsView() {
           <div className="state-icon">
             <Shield size={32} color="#aa3bff" />
           </div>
-          <h3>No Hosts Found</h3>
+          <h3>{statusFilter === 'deleted' ? 'No Deleted Hosts' : 'No Hosts Found'}</h3>
           <p className="state-desc">
-            No hosts matched your query. Click below to add a new verified room host.
+            {statusFilter === 'deleted'
+              ? 'No host accounts are currently in the deleted trash.'
+              : 'No hosts matched your query. Click below to add a new verified room host.'}
           </p>
-          <button className="primary small-btn" onClick={() => setShowCreateModal(true)}>
-            <Plus size={14} /> Add First Host
-          </button>
+          {statusFilter !== 'deleted' && (
+            <button className="primary small-btn" onClick={() => setShowCreateModal(true)}>
+              <Plus size={14} /> Add First Host
+            </button>
+          )}
         </div>
       ) : (
         <div className="hosts-grid">
           {filteredHosts.map((h) => {
+            const isHostDeleted =
+              deletedIds.includes(h.id) || (h.status || '').toLowerCase() === 'deleted'
             const isActive = (h.status || 'active').toLowerCase() === 'active'
             return (
               <article key={h.id} className="host-card">
@@ -493,8 +525,13 @@ export function HostsView() {
                       </p>
                     </div>
                   </div>
-                  <span className={`status-pill ${isActive ? 'active' : 'suspended'}`}>
-                    {isActive ? 'ACTIVE' : 'DISABLED'}
+                  <span
+                    className={`status-pill ${
+                      isHostDeleted ? 'suspended' : isActive ? 'active' : 'suspended'
+                    }`}
+                    style={isHostDeleted ? { borderColor: 'var(--coral-color)', color: 'var(--coral-color)' } : {}}
+                  >
+                    {isHostDeleted ? 'DELETED' : isActive ? 'ACTIVE' : 'DISABLED'}
                   </span>
                 </div>
 
@@ -515,67 +552,79 @@ export function HostsView() {
                 </div>
 
                 <div className="host-card-actions">
-                  <button
-                    className="secondary small-btn"
-                    onClick={() => {
-                      setEditHostId(h.id)
-                      setEditName(h.name || '')
-                      setEditMobile(h.mobileNumber || '')
-                      setEditUpiId(h.upiId || '')
-                      setEditRole((h.role === 'tournament' ? 'tournament' : 'omb'))
-                      setEditStatus(isActive ? 'active' : 'disabled')
-                      setShowEditModal(true)
-                    }}
-                    title="Edit host details"
-                  >
-                    <Edit2 size={13} /> Edit
-                  </button>
+                  {isHostDeleted ? (
+                    <button
+                      className="success small-btn"
+                      onClick={() => handleRestoreHost(h)}
+                      title="Restore host account back to Active"
+                    >
+                      <CheckCircle2 size={13} /> Restore Host
+                    </button>
+                  ) : (
+                    <>
+                      <button
+                        className="secondary small-btn"
+                        onClick={() => {
+                          setEditHostId(h.id)
+                          setEditName(h.name || '')
+                          setEditMobile(h.mobileNumber || '')
+                          setEditUpiId(h.upiId || '')
+                          setEditRole((h.role === 'tournament' ? 'tournament' : 'omb'))
+                          setEditStatus(isActive ? 'active' : 'disabled')
+                          setShowEditModal(true)
+                        }}
+                        title="Edit host details"
+                      >
+                        <Edit2 size={13} /> Edit
+                      </button>
 
-                  <button
-                    className="secondary small-btn"
-                    onClick={() => {
-                      setActiveResetHost(h)
-                      setShowResetModal(true)
-                    }}
-                    title="Reset host password"
-                  >
-                    <Key size={13} /> Password
-                  </button>
+                      <button
+                        className="secondary small-btn"
+                        onClick={() => {
+                          setActiveResetHost(h)
+                          setShowResetModal(true)
+                        }}
+                        title="Reset host password"
+                      >
+                        <Key size={13} /> Password
+                      </button>
 
-                  <button
-                    className="success small-btn"
-                    onClick={() => {
-                      setActivePayHost(h)
-                      setShowPayModal(true)
-                    }}
-                    title="Settle unpaid commission"
-                  >
-                    <CreditCard size={13} /> Settle
-                  </button>
+                      <button
+                        className="success small-btn"
+                        onClick={() => {
+                          setActivePayHost(h)
+                          setShowPayModal(true)
+                        }}
+                        title="Settle unpaid commission"
+                      >
+                        <CreditCard size={13} /> Settle
+                      </button>
 
-                  <button
-                    className={`${isActive ? 'warning' : 'success'} small-btn`}
-                    onClick={() => handleToggleStatus(h)}
-                    title={isActive ? 'Disable / Suspend host account' : 'Enable host account'}
-                  >
-                    {isActive ? (
-                      <>
-                        <Power size={13} /> Disable
-                      </>
-                    ) : (
-                      <>
-                        <CheckCircle2 size={13} /> Enable
-                      </>
-                    )}
-                  </button>
+                      <button
+                        className={`${isActive ? 'warning' : 'success'} small-btn`}
+                        onClick={() => handleToggleStatus(h)}
+                        title={isActive ? 'Disable / Suspend host account' : 'Enable host account'}
+                      >
+                        {isActive ? (
+                          <>
+                            <Power size={13} /> Disable
+                          </>
+                        ) : (
+                          <>
+                            <CheckCircle2 size={13} /> Enable
+                          </>
+                        )}
+                      </button>
 
-                  <button
-                    className="danger small-btn"
-                    onClick={() => promptDeleteHost(h)}
-                    title="Delete host account permanently"
-                  >
-                    <Trash2 size={13} /> Delete
-                  </button>
+                      <button
+                        className="danger small-btn"
+                        onClick={() => promptDeleteHost(h)}
+                        title="Delete host account permanently"
+                      >
+                        <Trash2 size={13} /> Delete
+                      </button>
+                    </>
+                  )}
                 </div>
               </article>
             )
