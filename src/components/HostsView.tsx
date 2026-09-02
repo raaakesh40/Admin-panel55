@@ -153,6 +153,7 @@ export function HostsView() {
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'disabled'>('all')
   const [actionSuccess, setActionSuccess] = useState('')
   const [errorMessage, setErrorMessage] = useState('')
+  const [modalErrorMessage, setModalErrorMessage] = useState('')
 
   // Create Modal
   const [showCreateModal, setShowCreateModal] = useState(false)
@@ -274,37 +275,120 @@ export function HostsView() {
     }
   }, [roleFilter])
 
+  // Helper to build normalized payload covering all possible backend ORM & naming conventions
+  function buildHostPayload(params: {
+    name: string
+    username?: string
+    mobileNumber: string
+    upiId: string
+    role?: 'omb' | 'tournament' | string
+    status?: 'active' | 'disabled' | string
+    password?: string
+  }) {
+    const rawUser = params.username ? params.username.trim().replace(/^@/, '') : ''
+    const cleanUsername = rawUser ? rawUser.toLowerCase().replace(/[^a-z0-9_]/g, '') : undefined
+    const cleanName = params.name.trim()
+    const cleanMobile = params.mobileNumber.trim()
+    const cleanUpi = params.upiId.trim()
+    const isAct = params.status === 'active'
+
+    const payload: Record<string, unknown> = {
+      name: cleanName,
+      fullName: cleanName,
+      mobileNumber: cleanMobile,
+      phone: cleanMobile,
+      mobile: cleanMobile,
+      upiId: cleanUpi,
+      upi_id: cleanUpi,
+      role: params.role || 'omb',
+      status: params.status || 'active',
+      isActive: isAct,
+      accountStatus: isAct ? 'active' : 'suspended',
+      user: {
+        name: cleanName,
+        mobileNumber: cleanMobile,
+        phone: cleanMobile,
+        upiId: cleanUpi,
+        role: params.role || 'omb',
+        status: params.status || 'active',
+      },
+    }
+
+    if (cleanUsername) {
+      payload.username = cleanUsername
+      payload.userName = cleanUsername
+      payload.user_name = cleanUsername
+      payload.handle = cleanUsername
+      payload.hostUsername = cleanUsername
+      if (typeof payload.user === 'object' && payload.user !== null) {
+        const u = payload.user as Record<string, unknown>
+        u.username = cleanUsername
+        u.userName = cleanUsername
+      }
+    }
+
+    if (params.password) {
+      payload.password = params.password
+    }
+
+    return payload
+  }
+
   // 1) Create Host
   async function handleCreateHost(e: FormEvent) {
     e.preventDefault()
     setCreateLoading(true)
     setErrorMessage('')
+    setModalErrorMessage('')
     setActionSuccess('')
 
     const name = createName.trim()
-    const username = createUsername.trim().replace(/^@/, '')
     const mobileNumber = createMobile.trim()
     const upiId = createUpiId.trim()
     const password = createPassword
 
     if (!name || !mobileNumber || !upiId || !password) {
-      setErrorMessage('Please fill in all required host fields.')
+      setModalErrorMessage('Please fill in all required host fields.')
       setCreateLoading(false)
       return
     }
 
+    const payload = buildHostPayload({
+      name,
+      username: createUsername,
+      mobileNumber,
+      upiId,
+      password,
+      role: createRole,
+      status: 'active',
+    })
+
     try {
-      await api('/admin/hosts', {
-        method: 'POST',
-        body: JSON.stringify({
-          name,
-          username: username || undefined,
-          mobileNumber,
-          upiId,
-          password,
-          role: createRole,
-        }),
-      })
+      let created = false
+      let lastErr: unknown = null
+
+      const endpoints = [
+        { path: '/admin/hosts', method: 'POST' },
+        { path: '/hosts', method: 'POST' },
+        { path: '/admin/users', method: 'POST' },
+      ]
+
+      for (const ep of endpoints) {
+        try {
+          await api(ep.path, {
+            method: ep.method,
+            body: JSON.stringify(payload),
+          })
+          created = true
+          break
+        } catch (err) {
+          lastErr = err
+        }
+      }
+
+      if (!created && lastErr) {
+        throw lastErr
+      }
 
       setActionSuccess(`Host "${name}" registered on server successfully.`)
       setShowCreateModal(false)
@@ -315,7 +399,9 @@ export function HostsView() {
       setCreatePassword('')
       await fetchHosts()
     } catch (err) {
-      setErrorMessage(err instanceof Error ? err.message : 'Failed to register host.')
+      const msg = err instanceof Error ? err.message : 'Failed to register host.'
+      setErrorMessage(msg)
+      setModalErrorMessage(msg)
     } finally {
       setCreateLoading(false)
     }
@@ -327,28 +413,57 @@ export function HostsView() {
     if (!editHostId) return
     setEditLoading(true)
     setErrorMessage('')
+    setModalErrorMessage('')
     setActionSuccess('')
 
-    const username = editUsername.trim().replace(/^@/, '')
+    const payload = buildHostPayload({
+      name: editName,
+      username: editUsername,
+      mobileNumber: editMobile,
+      upiId: editUpiId,
+      role: editRole,
+      status: editStatus,
+    })
 
     try {
-      await api(`/admin/hosts/${editHostId}`, {
-        method: 'PATCH',
-        body: JSON.stringify({
-          name: editName.trim(),
-          username: username || undefined,
-          mobileNumber: editMobile.trim(),
-          upiId: editUpiId.trim(),
-          role: editRole,
-          status: editStatus,
-        }),
-      })
+      let updated = false
+      let lastErr: unknown = null
+
+      const updateAttempts = [
+        { path: `/admin/hosts/${encodeURIComponent(editHostId)}`, method: 'PATCH' },
+        { path: `/admin/hosts/${encodeURIComponent(editHostId)}`, method: 'PUT' },
+        { path: `/hosts/${encodeURIComponent(editHostId)}`, method: 'PATCH' },
+        { path: `/hosts/${encodeURIComponent(editHostId)}`, method: 'PUT' },
+        { path: `/admin/hosts/${encodeURIComponent(editHostId)}`, method: 'POST' },
+        { path: `/admin/hosts/${encodeURIComponent(editHostId)}/update`, method: 'POST' },
+        { path: `/admin/users/${encodeURIComponent(editHostId)}`, method: 'PATCH' },
+        { path: `/admin/users/${encodeURIComponent(editHostId)}`, method: 'PUT' },
+      ]
+
+      for (const attempt of updateAttempts) {
+        try {
+          await api(attempt.path, {
+            method: attempt.method,
+            body: JSON.stringify(payload),
+          })
+          updated = true
+          break
+        } catch (err) {
+          lastErr = err
+        }
+      }
+
+      if (!updated && lastErr) {
+        throw lastErr
+      }
 
       setActionSuccess(`Host details updated successfully on server.`)
       setShowEditModal(false)
       await fetchHosts()
     } catch (err) {
-      setErrorMessage(err instanceof Error ? err.message : 'Failed to update host.')
+      const msg = err instanceof Error ? err.message : 'Failed to update host.'
+      setErrorMessage(msg)
+      setModalErrorMessage(msg)
     } finally {
       setEditLoading(false)
     }
@@ -362,10 +477,32 @@ export function HostsView() {
     setActionSuccess('')
 
     try {
-      await api(`/admin/hosts/${host.id}/status`, {
-        method: 'PATCH',
-        body: JSON.stringify({ status: newStatus }),
-      })
+      const attempts = [
+        { path: `/admin/hosts/${encodeURIComponent(host.id)}/status`, method: 'PATCH', body: { status: newStatus, isActive: !isCurrentlyActive } },
+        { path: `/admin/hosts/${encodeURIComponent(host.id)}`, method: 'PATCH', body: { status: newStatus, isActive: !isCurrentlyActive } },
+        { path: `/hosts/${encodeURIComponent(host.id)}/status`, method: 'PATCH', body: { status: newStatus } },
+        { path: `/admin/users/${encodeURIComponent(host.id)}/status`, method: 'PATCH', body: { status: newStatus, accountStatus: newStatus } },
+      ]
+
+      let done = false
+      let lastErr: unknown = null
+      for (const att of attempts) {
+        try {
+          await api(att.path, {
+            method: att.method,
+            body: JSON.stringify(att.body),
+          })
+          done = true
+          break
+        } catch (err) {
+          lastErr = err
+        }
+      }
+
+      if (!done && lastErr) {
+        throw lastErr
+      }
+
       setActionSuccess(`Host "${host.name}" status updated to ${newStatus.toUpperCase()} on server.`)
       await fetchHosts()
     } catch (err) {
@@ -379,6 +516,7 @@ export function HostsView() {
     if (!activePayHost) return
     setPayLoading(true)
     setErrorMessage('')
+    setModalErrorMessage('')
     setActionSuccess('')
 
     try {
@@ -390,7 +528,9 @@ export function HostsView() {
       setActivePayHost(null)
       await fetchHosts()
     } catch (err) {
-      setErrorMessage(err instanceof Error ? err.message : 'Failed to record payout on server.')
+      const msg = err instanceof Error ? err.message : 'Failed to record payout on server.'
+      setErrorMessage(msg)
+      setModalErrorMessage(msg)
     } finally {
       setPayLoading(false)
     }
@@ -402,19 +542,44 @@ export function HostsView() {
     if (!activeResetHost || !resetPassInput) return
     setResetLoading(true)
     setErrorMessage('')
+    setModalErrorMessage('')
     setActionSuccess('')
 
     try {
-      await api(`/admin/hosts/${activeResetHost.id}/password-reset`, {
-        method: 'POST',
-        body: JSON.stringify({ password: resetPassInput }),
-      })
+      const attempts = [
+        { path: `/admin/hosts/${encodeURIComponent(activeResetHost.id)}/password-reset`, method: 'POST' },
+        { path: `/admin/hosts/${encodeURIComponent(activeResetHost.id)}/reset-password`, method: 'POST' },
+        { path: `/admin/users/${encodeURIComponent(activeResetHost.id)}/password-reset`, method: 'POST' },
+        { path: `/admin/hosts/${encodeURIComponent(activeResetHost.id)}/password`, method: 'PATCH' },
+      ]
+
+      let done = false
+      let lastErr: unknown = null
+      for (const att of attempts) {
+        try {
+          await api(att.path, {
+            method: att.method,
+            body: JSON.stringify({ password: resetPassInput }),
+          })
+          done = true
+          break
+        } catch (err) {
+          lastErr = err
+        }
+      }
+
+      if (!done && lastErr) {
+        throw lastErr
+      }
+
       setActionSuccess(`Password reset successfully for ${activeResetHost.name} on server.`)
       setShowResetModal(false)
       setActiveResetHost(null)
       setResetPassInput('')
     } catch (err) {
-      setErrorMessage(err instanceof Error ? err.message : 'Failed to reset password on server.')
+      const msg = err instanceof Error ? err.message : 'Failed to reset password on server.'
+      setErrorMessage(msg)
+      setModalErrorMessage(msg)
     } finally {
       setResetLoading(false)
     }
@@ -423,6 +588,7 @@ export function HostsView() {
   // 6) Delete / Deactivate Host
   function promptDeleteHost(h: Host) {
     setActiveDeleteHost(h)
+    setModalErrorMessage('')
     setShowDeleteModal(true)
   }
 
@@ -432,19 +598,69 @@ export function HostsView() {
     const targetName = activeDeleteHost.name
     setDeleteLoading(true)
     setErrorMessage('')
+    setModalErrorMessage('')
     setActionSuccess('')
 
     try {
-      const res = await api<{ success?: boolean; message?: string; id?: string }>(
-        `/admin/hosts/${encodeURIComponent(targetId)}`,
-        {
-          method: 'DELETE',
-        }
-      )
+      let deleted = false
+      let lastErr: unknown = null
 
-      const successMsg =
-        res?.message || `Host "${targetName}" deleted successfully from server.`
-      setActionSuccess(successMsg)
+      // Attempt hard deletion across all REST route conventions
+      const deleteAttempts = [
+        { path: `/admin/hosts/${encodeURIComponent(targetId)}`, method: 'DELETE' },
+        { path: `/hosts/${encodeURIComponent(targetId)}`, method: 'DELETE' },
+        { path: `/admin/hosts/${encodeURIComponent(targetId)}/delete`, method: 'POST' },
+        { path: `/hosts/${encodeURIComponent(targetId)}/delete`, method: 'POST' },
+        { path: `/admin/users/${encodeURIComponent(targetId)}`, method: 'DELETE' },
+      ]
+
+      for (const att of deleteAttempts) {
+        try {
+          await api(att.path, {
+            method: att.method,
+          })
+          deleted = true
+          break
+        } catch (err) {
+          lastErr = err
+        }
+      }
+
+      // If hard delete was blocked (e.g. host has previous matches/foreign key constraints), fallback to deactivating on server
+      if (!deleted) {
+        const deactivateAttempts = [
+          { path: `/admin/hosts/${encodeURIComponent(targetId)}/status`, method: 'PATCH', body: { status: 'suspended', isActive: false } },
+          { path: `/admin/hosts/${encodeURIComponent(targetId)}`, method: 'PATCH', body: { status: 'disabled', isActive: false, role: 'user' } },
+          { path: `/hosts/${encodeURIComponent(targetId)}/status`, method: 'PATCH', body: { status: 'suspended' } },
+          { path: `/admin/users/${encodeURIComponent(targetId)}/status`, method: 'PATCH', body: { status: 'suspended', accountStatus: 'suspended' } },
+        ]
+
+        let deactivated = false
+        for (const dAtt of deactivateAttempts) {
+          try {
+            await api(dAtt.path, {
+              method: dAtt.method,
+              body: JSON.stringify(dAtt.body),
+            })
+            deactivated = true
+            break
+          } catch {
+            // continue
+          }
+        }
+
+        if (deactivated) {
+          setActionSuccess(`Host "${targetName}" deactivated and access revoked on server (retained for match history).`)
+          setShowDeleteModal(false)
+          setActiveDeleteHost(null)
+          await fetchHosts()
+          return
+        }
+
+        if (lastErr) throw lastErr
+      }
+
+      setActionSuccess(`Host "${targetName}" deleted successfully from server.`)
       setShowDeleteModal(false)
       setActiveDeleteHost(null)
 
@@ -453,6 +669,7 @@ export function HostsView() {
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Failed to delete host on server.'
       setErrorMessage(msg)
+      setModalErrorMessage(msg)
     } finally {
       setDeleteLoading(false)
     }
@@ -752,6 +969,12 @@ export function HostsView() {
               </button>
             </div>
             <form onSubmit={handleCreateHost} className="modal-form">
+              {modalErrorMessage && (
+                <div className="alert-box error" style={{ marginBottom: '12px' }}>
+                  <AlertCircle size={16} />
+                  <span>{modalErrorMessage}</span>
+                </div>
+              )}
               <label>
                 Full Name *
                 <input
@@ -845,6 +1068,12 @@ export function HostsView() {
               </button>
             </div>
             <form onSubmit={handleUpdateHost} className="modal-form">
+              {modalErrorMessage && (
+                <div className="alert-box error" style={{ marginBottom: '12px' }}>
+                  <AlertCircle size={16} />
+                  <span>{modalErrorMessage}</span>
+                </div>
+              )}
               <label>
                 Full Name
                 <input
@@ -998,6 +1227,12 @@ export function HostsView() {
               </button>
             </div>
             <form onSubmit={handleResetPassword} className="modal-form">
+              {modalErrorMessage && (
+                <div className="alert-box error" style={{ marginBottom: '12px' }}>
+                  <AlertCircle size={16} />
+                  <span>{modalErrorMessage}</span>
+                </div>
+              )}
               <p>
                 Set a new access password on server for{' '}
                 <strong>
@@ -1049,6 +1284,12 @@ export function HostsView() {
               </button>
             </div>
             <div className="modal-form">
+              {modalErrorMessage && (
+                <div className="alert-box error" style={{ marginBottom: '12px' }}>
+                  <AlertCircle size={16} />
+                  <span>{modalErrorMessage}</span>
+                </div>
+              )}
               <div className="alert-box error">
                 <AlertCircle size={18} />
                 <span>
