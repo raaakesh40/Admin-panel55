@@ -783,7 +783,7 @@ export function HostsView() {
                   type="button"
                   className="danger small-btn"
                   onClick={() => {
-                    const h = hosts.find((item) => item.id === editHostId)
+                    const h = allFetchedHosts.find((item) => item.id === editHostId)
                     if (h) {
                       setShowEditModal(false)
                       promptDeleteHost(h)
