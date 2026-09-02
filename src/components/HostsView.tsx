@@ -605,12 +605,14 @@ export function HostsView() {
       let deleted = false
       let lastErr: unknown = null
 
-      // Attempt hard deletion across all REST route conventions
+      // Attempt permanent deletion on real server
       const deleteAttempts = [
         { path: `/admin/hosts/${encodeURIComponent(targetId)}`, method: 'DELETE' },
         { path: `/hosts/${encodeURIComponent(targetId)}`, method: 'DELETE' },
         { path: `/admin/hosts/${encodeURIComponent(targetId)}/delete`, method: 'POST' },
         { path: `/hosts/${encodeURIComponent(targetId)}/delete`, method: 'POST' },
+        { path: `/admin/hosts/delete`, method: 'POST', body: JSON.stringify({ id: targetId, hostId: targetId }) },
+        { path: `/admin/hosts`, method: 'DELETE', body: JSON.stringify({ id: targetId, hostId: targetId }) },
         { path: `/admin/users/${encodeURIComponent(targetId)}`, method: 'DELETE' },
       ]
 
@@ -618,6 +620,7 @@ export function HostsView() {
         try {
           await api(att.path, {
             method: att.method,
+            body: att.body,
           })
           deleted = true
           break
@@ -626,38 +629,10 @@ export function HostsView() {
         }
       }
 
-      // If hard delete was blocked (e.g. host has previous matches/foreign key constraints), fallback to deactivating on server
       if (!deleted) {
-        const deactivateAttempts = [
-          { path: `/admin/hosts/${encodeURIComponent(targetId)}/status`, method: 'PATCH', body: { status: 'suspended', isActive: false } },
-          { path: `/admin/hosts/${encodeURIComponent(targetId)}`, method: 'PATCH', body: { status: 'disabled', isActive: false, role: 'user' } },
-          { path: `/hosts/${encodeURIComponent(targetId)}/status`, method: 'PATCH', body: { status: 'suspended' } },
-          { path: `/admin/users/${encodeURIComponent(targetId)}/status`, method: 'PATCH', body: { status: 'suspended', accountStatus: 'suspended' } },
-        ]
-
-        let deactivated = false
-        for (const dAtt of deactivateAttempts) {
-          try {
-            await api(dAtt.path, {
-              method: dAtt.method,
-              body: JSON.stringify(dAtt.body),
-            })
-            deactivated = true
-            break
-          } catch {
-            // continue
-          }
-        }
-
-        if (deactivated) {
-          setActionSuccess(`Host "${targetName}" deactivated and access revoked on server (retained for match history).`)
-          setShowDeleteModal(false)
-          setActiveDeleteHost(null)
-          await fetchHosts()
-          return
-        }
-
+        // If server failed to delete, do not disable or fake delete. Throw real server error.
         if (lastErr) throw lastErr
+        throw new Error('Server did not complete host deletion.')
       }
 
       setActionSuccess(`Host "${targetName}" deleted successfully from server.`)
