@@ -144,8 +144,8 @@ export function UsersView() {
     setErrorMessage('')
     setActionSuccess('')
 
-    const numericAmount技巧 = Math.round(Number(adjustAmount))
-    const signedAmount = adjustAction === 'add' ? numericAmount技巧 : -numericAmount技巧
+    const numericAmount = Math.round(Number(adjustAmount))
+    const signedAmount = adjustAction === 'add' ? numericAmount : -numericAmount
     const backendWalletType = adjustWalletType === 'play_coins' ? 'playCoins' : 'winningCoins'
 
     try {
@@ -172,7 +172,7 @@ export function UsersView() {
       })
 
       setActionSuccess(
-        `${adjustAction === 'add' ? 'Added' : 'Deducted'} ₹${numericAmount技巧} ${
+        `${adjustAction === 'add' ? 'Added' : 'Deducted'} ₹${numericAmount} ${
           adjustWalletType === 'play_coins' ? 'Play Coins' : 'Winning Coins'
         }.`
       )
