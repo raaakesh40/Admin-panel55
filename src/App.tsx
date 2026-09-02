@@ -13,6 +13,8 @@ import {
   LogOut,
   Swords,
   Layers,
+  Menu,
+  X,
 } from 'lucide-react'
 import type { DashboardData, SessionUser } from './types'
 import { api } from './services/api'
@@ -60,9 +62,11 @@ export function App() {
   const [dashboard, setDashboard] = useState<DashboardData | null>(null)
   const [error, setError] = useState('')
   const [isRefreshing, setIsRefreshing] = useState(false)
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
 
   function navigateTo(newPage: typeof page, gameId?: string) {
     setSelectedGameFilter(gameId)
+    setMobileMenuOpen(false)
     if (newPage === page && gameId === undefined) return
     setHistory((prev) => [...prev, newPage])
     setPage(newPage)
@@ -405,12 +409,29 @@ export function App() {
 
   return (
     <div className="app-shell">
-      <aside>
+      {mobileMenuOpen && (
+        <div
+          className="sidebar-backdrop"
+          onClick={() => setMobileMenuOpen(false)}
+          aria-label="Close menu"
+        />
+      )}
+
+      <aside className={mobileMenuOpen ? 'mobile-open' : ''}>
         <div className="brand">
-          <div className="mark">
-            P<span>W</span>
+          <div className="brand-info">
+            <div className="mark">
+              P<span>W</span>
+            </div>
+            <strong>pagewoga</strong>
           </div>
-          <strong>pagewoga</strong>
+          <button
+            className="mobile-drawer-close"
+            onClick={() => setMobileMenuOpen(false)}
+            aria-label="Close navigation"
+          >
+            <X size={18} />
+          </button>
         </div>
 
         <div className="workspace">
@@ -449,6 +470,14 @@ export function App() {
       <section className="main">
         <header>
           <div className="header-left">
+            <button
+              className="mobile-menu-toggle-btn"
+              onClick={() => setMobileMenuOpen(true)}
+              aria-label="Open Navigation Menu"
+              title="Menu"
+            >
+              <Menu size={20} />
+            </button>
             {page !== 'Overview' && (
               <button className="back-button" onClick={goBack} title="Back">
                 ← Back
@@ -539,6 +568,49 @@ export function App() {
             {page === 'Notifications' && <NotificationsView />}
           </ErrorBoundary>
         </div>
+
+        {/* Mobile Quick Navigation Bar */}
+        <nav className="mobile-bottom-nav">
+          <button
+            className={page === 'Overview' ? 'active' : ''}
+            onClick={() => navigateTo('Overview')}
+            title="Overview"
+          >
+            <LayoutDashboard size={20} />
+            <span>Overview</span>
+          </button>
+          <button
+            className={page === 'Games' ? 'active' : ''}
+            onClick={() => navigateTo('Games')}
+            title="Games"
+          >
+            <Gamepad2 size={20} />
+            <span>Games</span>
+          </button>
+          <button
+            className={page === 'Ombs' ? 'active' : ''}
+            onClick={() => navigateTo('Ombs')}
+            title="OMB 1v1"
+          >
+            <Swords size={20} />
+            <span>OMB</span>
+          </button>
+          <button
+            className={page === 'Tournaments' ? 'active' : ''}
+            onClick={() => navigateTo('Tournaments')}
+            title="Tournaments"
+          >
+            <Trophy size={20} />
+            <span>Tourn</span>
+          </button>
+          <button
+            onClick={() => setMobileMenuOpen(true)}
+            title="More Sections"
+          >
+            <Menu size={20} />
+            <span>Menu</span>
+          </button>
+        </nav>
       </section>
     </div>
   )
