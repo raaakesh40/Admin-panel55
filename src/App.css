@@ -1191,21 +1191,27 @@ button.warning:hover {
 
 .host-details-box {
   background: var(--surface-muted);
-  padding: 8px 10px;
-  border-radius: 6px;
+  border: 1px solid var(--border-color);
+  padding: 8px 12px;
+  border-radius: 8px;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 6px;
+  margin-top: 4px;
 }
 
 .detail-line {
   display: flex;
+  align-items: center;
   justify-content: space-between;
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .detail-line span {
   color: var(--text-muted);
+  display: inline-flex;
+  align-items: center;
+  font-size: 11px;
 }
 
 .host-finance-row {

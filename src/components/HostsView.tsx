@@ -14,6 +14,9 @@ import {
   Edit2,
   Trash2,
   Power,
+  User,
+  Phone,
+  Hash,
 } from 'lucide-react'
 
 function normalizeHost(raw: unknown): Host {
@@ -31,6 +34,7 @@ function normalizeHost(raw: unknown): Host {
   const userNested = (obj.User && typeof obj.User === 'object' ? obj.User : {}) as Record<string, unknown>
   const hostObj = (obj.host && typeof obj.host === 'object' ? obj.host : {}) as Record<string, unknown>
   const profile = (obj.profile && typeof obj.profile === 'object' ? obj.profile : {}) as Record<string, unknown>
+  const account = (obj.account && typeof obj.account === 'object' ? obj.account : {}) as Record<string, unknown>
 
   const id = String(
     obj.id ||
@@ -50,10 +54,9 @@ function normalizeHost(raw: unknown): Host {
     userNested.name ||
     hostObj.name ||
     profile.name ||
+    account.name ||
     obj.fullName ||
     user.fullName ||
-    obj.username ||
-    user.username ||
     'Host'
   ).trim()
 
@@ -64,6 +67,7 @@ function normalizeHost(raw: unknown): Host {
     userNested.username ||
     hostObj.username ||
     profile.username ||
+    account.username ||
     obj.userName ||
     user.userName ||
     obj.user_name ||
@@ -72,7 +76,10 @@ function normalizeHost(raw: unknown): Host {
     obj.hostUsername ||
     user.handle ||
     obj.handle ||
-    obj.slug
+    profile.handle ||
+    obj.slug ||
+    (typeof user.email === 'string' && user.email.includes('@') ? user.email.split('@')[0] : '') ||
+    (typeof obj.email === 'string' && obj.email.includes('@') ? obj.email.split('@')[0] : '')
 
   const username = rawUsername ? String(rawUsername).trim().replace(/^@/, '') : undefined
 
@@ -87,6 +94,8 @@ function normalizeHost(raw: unknown): Host {
     user.phone ||
     userNested.mobileNumber ||
     userNested.phone ||
+    account.mobileNumber ||
+    account.phone ||
     ''
   ).trim() || undefined
 
@@ -98,6 +107,7 @@ function normalizeHost(raw: unknown): Host {
     user.upiId ||
     user.upi_id ||
     userNested.upiId ||
+    account.upiId ||
     ''
   ).trim() || undefined
 
@@ -587,12 +597,10 @@ export function HostsView() {
                         )}
                       </div>
                       <p className="host-sub">
-                        {h.username && (
-                          <>
-                            <span className="mono-code text-purple">@{h.username}</span>
-                            <span>•</span>
-                          </>
-                        )}
+                        <span className="mono-code text-purple">
+                          {h.username ? `@${h.username}` : 'No username'}
+                        </span>
+                        <span>•</span>
                         <span>{h.mobileNumber || 'No phone'}</span>
                         <span>•</span>
                         <span className="mono-code">{h.upiId || 'No UPI'}</span>
@@ -602,6 +610,42 @@ export function HostsView() {
                   <span className={`status-pill ${isActive ? 'active' : 'suspended'}`}>
                     {isActive ? 'ACTIVE' : 'DISABLED'}
                   </span>
+                </div>
+
+                {/* Host Info Details Box with Username, Mobile, UPI & ID */}
+                <div className="host-details-box">
+                  <div className="detail-line">
+                    <span>
+                      <User size={12} style={{ display: 'inline', marginRight: '4px', verticalAlign: '-1px' }} />
+                      Username:
+                    </span>
+                    <strong className="mono-code text-purple">
+                      {h.username ? `@${h.username}` : '—'}
+                    </strong>
+                  </div>
+                  <div className="detail-line">
+                    <span>
+                      <Phone size={12} style={{ display: 'inline', marginRight: '4px', verticalAlign: '-1px' }} />
+                      Mobile Number:
+                    </span>
+                    <strong className="mono-code">{h.mobileNumber || '—'}</strong>
+                  </div>
+                  <div className="detail-line">
+                    <span>
+                      <CreditCard size={12} style={{ display: 'inline', marginRight: '4px', verticalAlign: '-1px' }} />
+                      UPI ID:
+                    </span>
+                    <strong className="mono-code">{h.upiId || '—'}</strong>
+                  </div>
+                  <div className="detail-line">
+                    <span>
+                      <Hash size={12} style={{ display: 'inline', marginRight: '4px', verticalAlign: '-1px' }} />
+                      Host ID:
+                    </span>
+                    <span className="mono-code muted" title={h.id}>
+                      {h.id.slice(0, 10)}...
+                    </span>
+                  </div>
                 </div>
 
                 <div className="host-role-row">
