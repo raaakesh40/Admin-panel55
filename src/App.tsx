@@ -12,6 +12,7 @@ import {
   RefreshCw,
   LogOut,
   Swords,
+  Layers,
 } from 'lucide-react'
 import type { DashboardData, SessionUser } from './types'
 import { api } from './services/api'
@@ -61,9 +62,7 @@ export function App() {
   const [isRefreshing, setIsRefreshing] = useState(false)
 
   function navigateTo(newPage: typeof page, gameId?: string) {
-    if (gameId !== undefined) {
-      setSelectedGameFilter(gameId)
-    }
+    setSelectedGameFilter(gameId)
     if (newPage === page && gameId === undefined) return
     setHistory((prev) => [...prev, newPage])
     setPage(newPage)
@@ -400,6 +399,7 @@ export function App() {
     { id: 'Competitions', label: 'Match Rooms', icon: <Shield size={18} /> },
     { id: 'Users', label: 'Players', icon: <Users size={18} /> },
     { id: 'Hosts', label: 'Hosts', icon: <Shield size={18} /> },
+    { id: 'Content', label: 'Content Hub', icon: <Layers size={18} /> },
     { id: 'Notifications', label: 'Alerts', icon: <Bell size={18} /> },
   ]
 
@@ -526,9 +526,11 @@ export function App() {
                 onNavigateToTournament={(gameId) => navigateTo('Tournaments', gameId)}
               />
             )}
-            {page === 'Ombs' && <OmbView initialGameId={selectedGameFilter} />}
+            {page === 'Ombs' && (
+              <OmbView key={`omb-${selectedGameFilter || 'all'}`} initialGameId={selectedGameFilter} />
+            )}
             {page === 'Tournaments' && (
-              <TournamentsView initialGameId={selectedGameFilter} />
+              <TournamentsView key={`tourn-${selectedGameFilter || 'all'}`} initialGameId={selectedGameFilter} />
             )}
             {page === 'Competitions' && <CompetitionsView />}
             {page === 'Users' && <UsersView />}

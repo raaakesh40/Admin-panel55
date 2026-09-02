@@ -1,5 +1,32 @@
-const RAW_API_BASE = (import.meta.env.VITE_API_BASE_URL || '/api').trim()
-const API_BASE = RAW_API_BASE.endsWith('/') ? RAW_API_BASE.slice(0, -1) : RAW_API_BASE
+const PROD_API_ORIGIN = 'https://api.pagewoga.online'
+
+function getInitialApiBase(): string {
+  const envUrl = (import.meta.env.VITE_API_BASE_URL || '').trim()
+  if (envUrl) {
+    return envUrl.endsWith('/') ? envUrl.slice(0, -1) : envUrl
+  }
+
+  // If in browser on a custom domain (not localhost and not cloud container preview)
+  if (typeof window !== 'undefined') {
+    const hostname = window.location.hostname.toLowerCase()
+    const isLocalOrContainer =
+      hostname === 'localhost' ||
+      hostname === '127.0.0.1' ||
+      hostname.endsWith('.run.app') ||
+      hostname.endsWith('.googleusercontent.com')
+    if (!isLocalOrContainer) {
+      return PROD_API_ORIGIN
+    }
+  }
+
+  return '/api'
+}
+
+let API_BASE = getInitialApiBase()
+
+export function setCustomApiBase(url: string) {
+  API_BASE = url.endsWith('/') ? url.slice(0, -1) : url
+}
 
 export function findTokenInObject(obj: unknown): string | null {
   if (!obj || typeof obj !== 'object') return null
@@ -144,29 +171,50 @@ export async function api<T>(path: string, options?: RequestInit): Promise<T> {
       headers: requestHeaders,
     })
   } catch (netErr) {
-    // If direct cross-origin fetch fails due to CORS or network, fallback through local /api proxy
-    if (!fullUrl.startsWith('/api')) {
+    // If direct fetch failed and fullUrl was relative /api, try remote PROD_API_ORIGIN
+    if (fullUrl.startsWith('/api')) {
       try {
-        response = await fetch(`/api${routeSubPath}`, {
+        const remoteUrl = `${PROD_API_ORIGIN}/api${routeSubPath}`
+        response = await fetch(remoteUrl, {
           ...options,
           credentials: 'include',
           headers: requestHeaders,
         })
-      } catch (proxyErr) {
+        // If remote worked, set API_BASE to remote origin for future calls
+        API_BASE = PROD_API_ORIGIN
+      } catch (remoteErr) {
         throw new Error(
-          `Network error connecting to ${fullUrl}: ${
+          `Network error connecting to backend: ${
             netErr instanceof Error ? netErr.message : 'Failed to fetch'
           }`,
-          { cause: proxyErr }
+          { cause: remoteErr }
         )
       }
     } else {
       throw new Error(
-        `Network error connecting to backend: ${
+        `Network error connecting to ${fullUrl}: ${
           netErr instanceof Error ? netErr.message : 'Failed to fetch'
         }`,
         { cause: netErr }
       )
+    }
+  }
+
+  // If response is 404 from a relative /api call (e.g. static hosting without API proxy), try remote
+  if (response.status === 404 && fullUrl.startsWith('/api')) {
+    try {
+      const remoteUrl = `${PROD_API_ORIGIN}/api${routeSubPath}`
+      const remoteResp = await fetch(remoteUrl, {
+        ...options,
+        credentials: 'include',
+        headers: requestHeaders,
+      })
+      if (remoteResp.ok || remoteResp.status !== 404) {
+        response = remoteResp
+        API_BASE = PROD_API_ORIGIN
+      }
+    } catch {
+      // Keep original response
     }
   }
 
