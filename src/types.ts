@@ -52,6 +52,16 @@ export type UserProfile = {
   email?: string
 }
 
+export type Manager = {
+  id: string
+  name: string
+  username: string
+  mobileNumber: string
+  role: 'manager' | string
+  accountStatus: 'active' | 'suspended' | 'disabled' | string
+  createdAt?: string
+}
+
 export type UserResult = {
   user: UserProfile
   wallets: Wallet[]

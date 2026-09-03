@@ -15,6 +15,7 @@ import {
   Layers,
   Menu,
   X,
+  UserCheck,
 } from 'lucide-react'
 import type { DashboardData, SessionUser } from './types'
 import { api } from './services/api'
@@ -22,6 +23,7 @@ import { OverviewView } from './components/OverviewView'
 import { UsersView } from './components/UsersView'
 import { CompetitionsView } from './components/CompetitionsView'
 import { HostsView } from './components/HostsView'
+import { ManagersView } from './components/ManagersView'
 import { ContentView } from './components/ContentView'
 import { GamesView } from './components/GamesView'
 import { OmbView } from './components/OmbView'
@@ -55,7 +57,7 @@ export function App() {
   const [loginLoading, setLoginLoading] = useState(false)
 
   const [page, setPage] = useState<
-    'Overview' | 'Games' | 'Ombs' | 'Tournaments' | 'Competitions' | 'Users' | 'Hosts' | 'Content' | 'Notifications'
+    'Overview' | 'Games' | 'Ombs' | 'Tournaments' | 'Competitions' | 'Users' | 'Hosts' | 'Managers' | 'Content' | 'Notifications'
   >('Overview')
   const [history, setHistory] = useState<string[]>(['Overview'])
   const [selectedGameFilter, setSelectedGameFilter] = useState<string | undefined>(undefined)
@@ -404,6 +406,7 @@ export function App() {
     { id: 'Competitions', label: 'Match Rooms', icon: <Shield size={18} /> },
     { id: 'Users', label: 'Players', icon: <Users size={18} /> },
     { id: 'Hosts', label: 'Hosts', icon: <Shield size={18} /> },
+    { id: 'Managers', label: 'Managers', icon: <UserCheck size={18} />, badge: 'STAFF' },
     { id: 'Content', label: 'Content Hub', icon: <Layers size={18} /> },
     { id: 'Notifications', label: 'Alerts', icon: <Bell size={18} /> },
   ]
@@ -494,6 +497,10 @@ export function App() {
                   ? 'Tournament Championships'
                   : page === 'Users'
                   ? 'Players'
+                  : page === 'Hosts'
+                  ? 'Hosts'
+                  : page === 'Managers'
+                  ? 'Manager Management'
                   : page === 'Competitions'
                   ? 'Match Rooms'
                   : page === 'Content'
@@ -565,6 +572,7 @@ export function App() {
             {page === 'Competitions' && <CompetitionsView />}
             {page === 'Users' && <UsersView />}
             {page === 'Hosts' && <HostsView />}
+            {page === 'Managers' && <ManagersView />}
             {page === 'Content' && <ContentView />}
             {page === 'Notifications' && <NotificationsView />}
           </ErrorBoundary>
