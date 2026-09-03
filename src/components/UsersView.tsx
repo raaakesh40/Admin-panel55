@@ -13,6 +13,7 @@ import {
   CheckCircle2,
   KeyRound,
   CreditCard,
+  Shield,
 } from 'lucide-react'
 
 interface PayoutAccountItem {
@@ -53,6 +54,12 @@ export function UsersView() {
   const [showResetModal, setShowResetModal] = useState(false)
   const [resetPasswordInput, setResetPasswordInput] = useState('')
   const [resetLoading, setResetLoading] = useState(false)
+
+  // Role change modal
+  const [showRoleModal, setShowRoleModal] = useState(false)
+  const [selectedRole, setSelectedRole] = useState('user')
+  const [roleLoading, setRoleLoading] = useState(false)
+  const [roleModalError, setRoleModalError] = useState('')
 
   const fetchPayoutAccounts = useCallback(async (userId: string) => {
     if (!userId) {
@@ -241,6 +248,84 @@ export function UsersView() {
     }
   }
 
+  async function handleUpdateRole(e: FormEvent) {
+    e.preventDefault()
+    if (!result) return
+    setRoleLoading(true)
+    setRoleModalError('')
+    setActionSuccess('')
+
+    const targetRole = selectedRole.trim()
+    try {
+      const endpoints = [
+        `/admin/users/${encodeURIComponent(result.user.id)}`,
+        `/operations/users/${encodeURIComponent(result.user.id)}`,
+        `/admin/users/${encodeURIComponent(result.user.id)}/role`,
+        `/operations/users/${encodeURIComponent(result.user.id)}/role`,
+      ]
+
+      let updated = false
+      let lastErr: Error | null = null
+
+      for (const ep of endpoints) {
+        try {
+          await api(ep, {
+            method: 'PATCH',
+            body: JSON.stringify({ role: targetRole }),
+          })
+          updated = true
+          break
+        } catch (err) {
+          lastErr = err instanceof Error ? err : new Error(String(err))
+        }
+      }
+
+      if (!updated && lastErr) {
+        try {
+          await api(`/admin/users/${encodeURIComponent(result.user.id)}/role`, {
+            method: 'POST',
+            body: JSON.stringify({ role: targetRole }),
+          })
+          updated = true
+        } catch {
+          throw lastErr
+        }
+      }
+
+      // If user became a manager, persist to known managers list so Managers tab shows them
+      if (targetRole === 'manager') {
+        try {
+          const raw = localStorage.getItem('pagewoga_known_managers')
+          const list = raw ? JSON.parse(raw) : []
+          const existing = list.filter((m: { id: string }) => m.id !== result.user.id)
+          existing.unshift({
+            id: result.user.id,
+            name: result.user.name || result.user.username,
+            username: result.user.username,
+            mobileNumber: result.user.mobileNumber,
+            role: 'manager',
+            accountStatus: result.user.accountStatus || 'active',
+            createdAt: result.user.createdAt,
+          })
+          localStorage.setItem('pagewoga_known_managers', JSON.stringify(existing.slice(0, 50)))
+        } catch {
+          // ignore
+        }
+      }
+
+      setResult({
+        ...result,
+        user: { ...result.user, role: targetRole },
+      })
+      setActionSuccess(`Role successfully updated to "${targetRole.toUpperCase()}" for ${result.user.name || result.user.username}.`)
+      setShowRoleModal(false)
+    } catch (err) {
+      setRoleModalError(err instanceof Error ? err.message : 'Failed to update user role.')
+    } finally {
+      setRoleLoading(false)
+    }
+  }
+
   async function handleWalletAdjustment(e: FormEvent) {
     e.preventDefault()
     if (!result || !adjustAmount || Number(adjustAmount) <= 0) return
@@ -372,6 +457,16 @@ export function UsersView() {
                   }}
                 >
                   <KeyRound size={14} /> Reset Password
+                </button>
+                <button
+                  className="secondary small-btn"
+                  onClick={() => {
+                    setSelectedRole(result.user.role || 'user')
+                    setRoleModalError('')
+                    setShowRoleModal(true)
+                  }}
+                >
+                  <Shield size={14} /> Change Role
                 </button>
                 {(result.user.accountStatus || 'active').toLowerCase() === 'active' ? (
                   <button
@@ -631,6 +726,87 @@ export function UsersView() {
                 </button>
                 <button type="submit" className="primary" disabled={adjustLoading}>
                   {adjustLoading ? 'Saving...' : 'Apply'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Role Change Modal */}
+      {showRoleModal && result && (
+        <div className="modal-overlay">
+          <div className="modal-content" style={{ maxWidth: '420px' }}>
+            <div className="modal-header">
+              <h3 style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Shield size={18} /> Change User Role
+              </h3>
+              <button
+                type="button"
+                className="close-btn"
+                onClick={() => setShowRoleModal(false)}
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleUpdateRole} className="modal-form">
+              {roleModalError && (
+                <div className="alert-box error" style={{ marginBottom: '12px' }}>
+                  <AlertCircle size={16} />
+                  <span>{roleModalError}</span>
+                </div>
+              )}
+
+              <p style={{ fontSize: '13px', color: 'var(--text-muted)' }}>
+                Change system role for <strong>{result.user.name || result.user.username}</strong> ({result.user.mobileNumber || result.user.id}):
+              </p>
+
+              <label>
+                Assigned Role
+                <select
+                  value={selectedRole}
+                  onChange={(e) => setSelectedRole(e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '10px 12px',
+                    borderRadius: '6px',
+                    background: 'var(--surface-muted)',
+                    border: '1px solid var(--border-color)',
+                    color: 'var(--text-main)',
+                    fontSize: '14px',
+                  }}
+                >
+                  <option value="user">User / Player (Standard Access)</option>
+                  <option value="manager">Manager (Manager Panel Access: /manager)</option>
+                  <option value="omb_host">OMB Host (One Match Battle Host)</option>
+                  <option value="tournament_host">Tournament Host</option>
+                  <option value="admin">Admin (Full Administrator Access)</option>
+                  <option value="support">Support Staff</option>
+                </select>
+              </label>
+
+              <div style={{ background: 'var(--surface-muted)', padding: '10px 12px', borderRadius: '6px', fontSize: '12px', marginTop: '6px' }}>
+                <span style={{ color: 'var(--text-muted)' }}>Current Role: </span>
+                <strong style={{ color: '#3b82f6' }}>{result.user.role || 'user'}</strong>
+                {selectedRole === 'manager' && (
+                  <p style={{ margin: '6px 0 0', color: '#10b981', fontSize: '11px' }}>
+                    Assigning &quot;manager&quot; grants access to the Manager Panel and lists this user in the Managers section.
+                  </p>
+                )}
+              </div>
+
+              <div className="modal-actions" style={{ marginTop: '16px' }}>
+                <button
+                  type="button"
+                  className="secondary"
+                  onClick={() => setShowRoleModal(false)}
+                  disabled={roleLoading}
+                >
+                  Cancel
+                </button>
+                <button type="submit" className="primary" disabled={roleLoading}>
+                  {roleLoading ? 'Updating Role...' : 'Save Role'}
                 </button>
               </div>
             </form>
