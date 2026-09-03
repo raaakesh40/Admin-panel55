@@ -479,6 +479,7 @@ header h1 {
 .users-container,
 .competitions-container,
 .hosts-container,
+.managers-container,
 .content-container,
 .notifications-container {
   display: flex;

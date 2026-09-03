@@ -107,13 +107,16 @@ export function App() {
       .then((res) => {
         if (ignore) return
         const userObj = res.user || res
-        const role = userObj.role
+        const role = userObj.role?.toLowerCase()
         const name = userObj.name || userObj.username || 'Admin'
         const username = userObj.username
-        if (role && ['admin', 'manager', 'support'].includes(role.toLowerCase())) {
-          const userState = { name, role, username }
+        if (role === 'admin') {
+          const userState = { name, role: 'admin', username }
           setSession(userState)
           localStorage.setItem('admin_session_user', JSON.stringify(userState))
+        } else if (role) {
+          setSession(null)
+          localStorage.removeItem('admin_session_user')
         }
       })
       .catch(() => {
@@ -240,12 +243,20 @@ export function App() {
         }
       }
 
-      if (role && ['admin', 'manager', 'support'].includes(role)) {
-        const userState = { name: name || 'Administrator', role, username: login.username.trim() }
+      if (role === 'admin') {
+        const userState = { name: name || 'Administrator', role: 'admin', username: login.username.trim() }
         setSession(userState)
         localStorage.setItem('admin_session_user', JSON.stringify(userState))
+      } else if (role === 'manager') {
+        setLoginError('Your account has the "manager" role. Please sign in at the Manager Panel (/manager).')
+      } else if (role === 'omb_host') {
+        setLoginError('Your account has the "omb_host" role. Please sign in at the OMB Host Panel.')
+      } else if (role === 'tournament_host') {
+        setLoginError('Your account has the "tournament_host" role. Please sign in at the Tournament Host Panel.')
+      } else if (role === 'user') {
+        setLoginError('Access denied: Regular users cannot access the Admin Console. Please use the main app.')
       } else if (role) {
-        setLoginError(`Account role is "${role}". Administrator or Staff permissions required.`)
+        setLoginError(`Account role is "${role}". Administrator permissions required to access this Console.`)
       } else {
         // Fallback: Successful login
         const userState = { name: name || 'Administrator', role: 'admin', username: login.username.trim() }
@@ -572,7 +583,17 @@ export function App() {
             {page === 'Competitions' && <CompetitionsView />}
             {page === 'Users' && <UsersView />}
             {page === 'Hosts' && <HostsView />}
-            {page === 'Managers' && <ManagersView />}
+            {page === 'Managers' &&
+              (session.role === 'admin' ? (
+                <ManagersView />
+              ) : (
+                <div className="card" style={{ padding: '40px 24px', textAlign: 'center' }}>
+                  <h3 style={{ color: '#ef4444', margin: '0 0 8px' }}>Access Denied</h3>
+                  <p style={{ color: 'var(--text-muted)', margin: 0 }}>
+                    Only Administrators can view and manage Manager accounts.
+                  </p>
+                </div>
+              ))}
             {page === 'Content' && <ContentView />}
             {page === 'Notifications' && <NotificationsView />}
           </ErrorBoundary>
