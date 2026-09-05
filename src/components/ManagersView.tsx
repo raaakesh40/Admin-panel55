@@ -30,7 +30,7 @@ export function ManagersView() {
 
   // Search & Status Filter
   const [searchQuery, setSearchQuery] = useState('')
-  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'suspended'>('all')
+  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'deactivated'>('all')
 
   // Modals state
   const [showAddModal, setShowAddModal] = useState(false)
@@ -138,16 +138,16 @@ export function ManagersView() {
       setAddModalError('Username is required.')
       return
     }
-    if (!/^[a-z0-9_]{3,20}$/.test(username)) {
-      setAddModalError('Username must be 3-20 characters (letters, numbers, underscores).')
+    if (!/^[a-z0-9_.-]{3,30}$/.test(username)) {
+      setAddModalError('Username must be at least 3 characters (letters, numbers, _, ., - allowed).')
       return
     }
-    if (!mobileNumber || !/^[0-9]{10}$/.test(mobileNumber)) {
-      setAddModalError('Please enter a valid 10-digit mobile number.')
+    if (mobileNumber && !/^[+0-9]{10,15}$/.test(mobileNumber)) {
+      setAddModalError('Please enter a valid mobile number (10-15 digits, optional +).')
       return
     }
-    if (!password || password.length < 6) {
-      setAddModalError('Password must be at least 6 characters.')
+    if (!password || password.length < 8 || password.length > 256) {
+      setAddModalError('Password must be between 8 and 256 characters.')
       return
     }
     if (password !== addConfirmPassword) {
@@ -157,14 +157,18 @@ export function ManagersView() {
 
     setAddLoading(true)
     try {
+      const payload: { name: string; username: string; password: string; mobileNumber?: string } = {
+        name,
+        username,
+        password,
+      }
+      if (mobileNumber) {
+        payload.mobileNumber = mobileNumber
+      }
+
       await api('/admin/managers', {
         method: 'POST',
-        body: JSON.stringify({
-          name,
-          username,
-          mobileNumber,
-          password,
-        }),
+        body: JSON.stringify(payload),
       })
 
       setActionSuccess(`Manager "${name}" (@${username}) created successfully with role: manager.`)
@@ -177,7 +181,11 @@ export function ManagersView() {
       setRefreshTrigger((prev) => prev + 1)
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Failed to create manager.'
-      if (
+      if (msg.includes('USERNAME_EXISTS') || msg.toLowerCase().includes('username is already')) {
+        setAddModalError('This username is already in use (USERNAME_EXISTS).')
+      } else if (msg.includes('MOBILE_EXISTS') || msg.toLowerCase().includes('mobile number is already')) {
+        setAddModalError('This mobile number is already in use (MOBILE_EXISTS).')
+      } else if (
         msg.includes('409') ||
         msg.toLowerCase().includes('conflict') ||
         msg.toLowerCase().includes('already') ||
@@ -211,20 +219,28 @@ export function ManagersView() {
       setEditModalError('Username is required.')
       return
     }
-    if (!mobileNumber || !/^[0-9]{10}$/.test(mobileNumber)) {
-      setEditModalError('Please enter a valid 10-digit mobile number.')
+    if (!/^[a-z0-9_.-]{3,30}$/.test(username)) {
+      setEditModalError('Username must be at least 3 characters (letters, numbers, _, ., - allowed).')
+      return
+    }
+    if (mobileNumber && !/^[+0-9]{10,15}$/.test(mobileNumber)) {
+      setEditModalError('Please enter a valid mobile number (10-15 digits, optional +).')
       return
     }
 
     setEditLoading(true)
     try {
+      const payload: { name: string; username: string; mobileNumber?: string } = {
+        name,
+        username,
+      }
+      if (mobileNumber) {
+        payload.mobileNumber = mobileNumber
+      }
+
       await api(`/admin/managers/${encodeURIComponent(activeEditManager.id)}`, {
         method: 'PATCH',
-        body: JSON.stringify({
-          name,
-          username,
-          mobileNumber,
-        }),
+        body: JSON.stringify(payload),
       })
 
       setActionSuccess(`Manager "${name}" updated successfully.`)
@@ -232,7 +248,11 @@ export function ManagersView() {
       setRefreshTrigger((prev) => prev + 1)
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Failed to update manager.'
-      if (
+      if (msg.includes('USERNAME_EXISTS') || msg.toLowerCase().includes('username is already')) {
+        setEditModalError('This username is already in use (USERNAME_EXISTS).')
+      } else if (msg.includes('MOBILE_EXISTS') || msg.toLowerCase().includes('mobile number is already')) {
+        setEditModalError('This mobile number is already in use (MOBILE_EXISTS).')
+      } else if (
         msg.includes('409') ||
         msg.toLowerCase().includes('conflict') ||
         msg.toLowerCase().includes('already') ||
@@ -247,26 +267,30 @@ export function ManagersView() {
     }
   }
 
-  // DISABLE / ENABLE MANAGER (PATCH /api/admin/users/:id/status)
+  // DISABLE / ENABLE MANAGER (DELETE /api/admin/managers/:id or PATCH /api/admin/managers/:id)
   async function handleToggleStatus() {
     if (!activeStatusManager) return
     setStatusLoading(true)
     setActionSuccess('')
 
     const isCurrentlyActive = (activeStatusManager.accountStatus || 'active').toLowerCase() === 'active'
-    const newStatus = isCurrentlyActive ? 'suspended' : 'active'
 
     try {
-      await api(`/admin/users/${encodeURIComponent(activeStatusManager.id)}/status`, {
-        method: 'PATCH',
-        body: JSON.stringify({ status: newStatus }),
-      })
+      if (isCurrentlyActive) {
+        // Deactivate via DELETE /api/admin/managers/:id
+        await api(`/admin/managers/${encodeURIComponent(activeStatusManager.id)}`, {
+          method: 'DELETE',
+        })
+        setActionSuccess(`Manager "${activeStatusManager.name}" (@${activeStatusManager.username}) deactivated successfully.`)
+      } else {
+        // Reactivate via PATCH /api/admin/managers/:id with accountStatus: 'active'
+        await api(`/admin/managers/${encodeURIComponent(activeStatusManager.id)}`, {
+          method: 'PATCH',
+          body: JSON.stringify({ accountStatus: 'active' }),
+        })
+        setActionSuccess(`Manager "${activeStatusManager.name}" (@${activeStatusManager.username}) reactivated successfully.`)
+      }
 
-      setActionSuccess(
-        `Manager "${activeStatusManager.name}" (@${activeStatusManager.username}) ${
-          newStatus === 'active' ? 'enabled' : 'disabled / suspended'
-        } successfully.`
-      )
       setActiveStatusManager(null)
       setRefreshTrigger((prev) => prev + 1)
     } catch (err) {
@@ -284,8 +308,8 @@ export function ManagersView() {
     setPasswordModalError('')
     setActionSuccess('')
 
-    if (!newPassword || newPassword.length < 6) {
-      setPasswordModalError('New password must be at least 6 characters.')
+    if (!newPassword || newPassword.length < 8 || newPassword.length > 256) {
+      setPasswordModalError('New password must be between 8 and 256 characters.')
       return
     }
     if (newPassword !== confirmNewPassword) {
@@ -306,7 +330,11 @@ export function ManagersView() {
       setConfirmNewPassword('')
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Failed to reset password.'
-      setPasswordModalError(msg)
+      if (msg.includes('MANAGER_NOT_FOUND')) {
+        setPasswordModalError('Manager was not found (MANAGER_NOT_FOUND).')
+      } else {
+        setPasswordModalError(msg)
+      }
     } finally {
       setPasswordLoading(false)
     }
@@ -353,15 +381,19 @@ export function ManagersView() {
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Failed to permanently delete manager.'
       if (
+        msg.includes('MANAGER_HAS_HISTORY') ||
         msg.includes('409') ||
-        msg.toLowerCase().includes('conflict') ||
-        msg.toLowerCase().includes('record') ||
+        msg.toLowerCase().includes('financial') ||
         msg.toLowerCase().includes('history') ||
-        msg.toLowerCase().includes('financial')
+        msg.toLowerCase().includes('wallet') ||
+        msg.toLowerCase().includes('deposit') ||
+        msg.toLowerCase().includes('withdrawal')
       ) {
         setDeleteModalError(
-          'Permanent deletion blocked: This manager has associated financial, match, or competition records (409 Conflict). Only history-free accounts can be permanently removed. Please use "Deactivate" instead.'
+          'This manager has account or financial records and can only be deactivated (MANAGER_HAS_HISTORY).'
         )
+      } else if (msg.includes('MANAGER_NOT_FOUND')) {
+        setDeleteModalError('Manager was not found (MANAGER_NOT_FOUND).')
       } else {
         setDeleteModalError(msg)
       }
@@ -377,21 +409,21 @@ export function ManagersView() {
       !q ||
       m.name.toLowerCase().includes(q) ||
       m.username.toLowerCase().includes(q) ||
-      m.mobileNumber.includes(q) ||
+      (m.mobileNumber && m.mobileNumber.includes(q)) ||
       m.id.toLowerCase().includes(q)
 
     const status = (m.accountStatus || 'active').toLowerCase()
     const matchesStatus =
       statusFilter === 'all' ||
       (statusFilter === 'active' && status === 'active') ||
-      (statusFilter === 'suspended' && (status === 'suspended' || status === 'disabled' || status === 'banned'))
+      (statusFilter === 'deactivated' && (status === 'deactivated' || status === 'suspended' || status === 'disabled' || status === 'banned'))
 
     return matchesQuery && matchesStatus
   })
 
   const totalCount = managers.length
   const activeCount = managers.filter((m) => (m.accountStatus || 'active').toLowerCase() === 'active').length
-  const suspendedCount = totalCount - activeCount
+  const deactivatedCount = totalCount - activeCount
 
   return (
     <div className="managers-container">
@@ -472,8 +504,8 @@ export function ManagersView() {
         </div>
 
         <div className="card stat-card">
-          <span className="stat-label">Suspended / Disabled</span>
-          <b className="stat-value" style={{ color: '#ef4444' }}>{suspendedCount}</b>
+          <span className="stat-label">Deactivated</span>
+          <b className="stat-value" style={{ color: '#ef4444' }}>{deactivatedCount}</b>
           <span className="stat-desc">Login blocked</span>
         </div>
       </div>
@@ -508,10 +540,10 @@ export function ManagersView() {
           </button>
           <button
             type="button"
-            className={`secondary small-btn ${statusFilter === 'suspended' ? 'active' : ''}`}
-            onClick={() => setStatusFilter('suspended')}
+            className={`secondary small-btn ${statusFilter === 'deactivated' ? 'active' : ''}`}
+            onClick={() => setStatusFilter('deactivated')}
           >
-            Suspended ({suspendedCount})
+            Deactivated ({deactivatedCount})
           </button>
         </div>
       </div>
@@ -647,7 +679,7 @@ export function ManagersView() {
                               background: isActive ? '#10b981' : '#ef4444',
                             }}
                           />
-                          {isActive ? 'Active' : 'Suspended'}
+                          {isActive ? 'Active' : 'Deactivated'}
                         </span>
                       </td>
 
@@ -662,7 +694,7 @@ export function ManagersView() {
                               setEditModalError('')
                               setEditName(mgr.name)
                               setEditUsername(mgr.username)
-                              setEditMobileNumber(mgr.mobileNumber)
+                              setEditMobileNumber(mgr.mobileNumber || '')
                               setActiveEditManager(mgr)
                             }}
                           >
@@ -685,12 +717,12 @@ export function ManagersView() {
                             <Key size={15} />
                           </button>
 
-                          {/* Toggle Status (Disable/Enable) */}
+                          {/* Toggle Status (Deactivate/Reactivate) */}
                           <button
                             type="button"
                             className="icon-button"
                             style={{ color: isActive ? '#f59e0b' : '#10b981' }}
-                            title={isActive ? 'Disable Manager Access' : 'Enable Manager Access'}
+                            title={isActive ? 'Deactivate Manager Access' : 'Reactivate Manager Access'}
                             onClick={() => setActiveStatusManager(mgr)}
                           >
                             {isActive ? <UserX size={15} /> : <UserCheck size={15} />}
@@ -775,29 +807,28 @@ export function ManagersView() {
                   <input
                     required
                     type="text"
-                    placeholder="e.g. manager_rahul"
+                    placeholder="e.g. rakesh_manager"
                     value={addUsername}
-                    onChange={(e) => setAddUsername(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, ''))}
+                    onChange={(e) => setAddUsername(e.target.value.toLowerCase().replace(/[^a-z0-9_.-]/g, ''))}
                     autoCapitalize="none"
                     style={{ paddingLeft: '32px' }}
                   />
                 </div>
                 <small style={{ color: 'var(--text-muted)', fontSize: '11px', marginTop: '2px' }}>
-                  Lowercase letters, numbers, underscores only.
+                  At least 3 characters. Letters, numbers, underscores (_), dots (.), hyphens (-) allowed.
                 </small>
               </label>
 
               <label>
-                Mobile Number *
+                Mobile Number (Optional)
                 <div className="input-with-icon" style={{ position: 'relative' }}>
                   <Phone size={15} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
                   <input
-                    required
                     type="tel"
-                    placeholder="10-digit mobile number"
-                    maxLength={10}
+                    placeholder="e.g. +919876543210 (Optional)"
+                    maxLength={16}
                     value={addMobileNumber}
-                    onChange={(e) => setAddMobileNumber(e.target.value.replace(/[^0-9]/g, ''))}
+                    onChange={(e) => setAddMobileNumber(e.target.value.replace(/[^0-9+]/g, ''))}
                     style={{ paddingLeft: '32px' }}
                   />
                 </div>
@@ -810,7 +841,7 @@ export function ManagersView() {
                   <input
                     required
                     type={showAddPassword ? 'text' : 'password'}
-                    placeholder="Min 6 characters"
+                    placeholder="8 - 256 characters"
                     value={addPassword}
                     onChange={(e) => setAddPassword(e.target.value)}
                     style={{ paddingLeft: '32px' }}
@@ -824,6 +855,9 @@ export function ManagersView() {
                     {showAddPassword ? <EyeOff size={16} /> : <Eye size={16} />}
                   </button>
                 </div>
+                <small style={{ color: 'var(--text-muted)', fontSize: '11px', marginTop: '2px' }}>
+                  Must be between 8 and 256 characters.
+                </small>
               </label>
 
               <label>
@@ -914,19 +948,19 @@ export function ManagersView() {
                   required
                   type="text"
                   value={editUsername}
-                  onChange={(e) => setEditUsername(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, ''))}
+                  onChange={(e) => setEditUsername(e.target.value.toLowerCase().replace(/[^a-z0-9_.-]/g, ''))}
                   autoCapitalize="none"
                 />
               </label>
 
               <label>
-                Mobile Number
+                Mobile Number (Optional)
                 <input
-                  required
                   type="tel"
-                  maxLength={10}
+                  maxLength={16}
+                  placeholder="e.g. +919876543210 (Optional)"
                   value={editMobileNumber}
-                  onChange={(e) => setEditMobileNumber(e.target.value.replace(/[^0-9]/g, ''))}
+                  onChange={(e) => setEditMobileNumber(e.target.value.replace(/[^0-9+]/g, ''))}
                 />
               </label>
 
@@ -949,7 +983,7 @@ export function ManagersView() {
       )}
 
       {/* ========================================================================= */}
-      {/* MODAL 3: DISABLE / ENABLE MANAGER (PATCH /api/admin/users/:id/status) */}
+      {/* MODAL 3: DEACTIVATE / REACTIVATE MANAGER (DELETE or PATCH /api/admin/managers/:id) */}
       {/* ========================================================================= */}
       {activeStatusManager && (
         <div className="modal-overlay">
@@ -959,12 +993,12 @@ export function ManagersView() {
                 {activeStatusManager.accountStatus === 'active' ? (
                   <>
                     <UserX size={18} style={{ color: '#ef4444' }} />
-                    Disable Manager Access
+                    Deactivate Manager Access
                   </>
                 ) : (
                   <>
                     <UserCheck size={18} style={{ color: '#10b981' }} />
-                    Enable Manager Access
+                    Reactivate Manager Access
                   </>
                 )}
               </h3>
@@ -986,15 +1020,15 @@ export function ManagersView() {
                 <AlertCircle size={18} />
                 <span>
                   Are you sure you want to{' '}
-                  <strong>{activeStatusManager.accountStatus === 'active' ? 'disable' : 're-enable'}</strong>{' '}
+                  <strong>{activeStatusManager.accountStatus === 'active' ? 'deactivate' : 'reactivate'}</strong>{' '}
                   manager &quot;{activeStatusManager.name}&quot; (@{activeStatusManager.username})?
                 </span>
               </div>
 
               <p style={{ fontSize: '13px', color: 'var(--text-muted)', lineHeight: '1.5' }}>
                 {activeStatusManager.accountStatus === 'active'
-                  ? 'Disabling this manager sets their status to "suspended" (PATCH /api/admin/users/:id/status). The manager will be immediately blocked from signing in to the Manager Panel.'
-                  : 'Enabling this manager sets their status to "active" (PATCH /api/admin/users/:id/status). Manager Panel login permissions will be restored.'}
+                  ? 'Deactivating this manager sets accountStatus to "deactivated" via DELETE /api/admin/managers/:id. Their history is preserved, but they will be immediately blocked from logging in.'
+                  : 'Reactivating this manager sets accountStatus to "active" via PATCH /api/admin/managers/:id. Manager Panel access will be restored immediately.'}
               </p>
 
               <div className="modal-actions" style={{ marginTop: '20px' }}>
@@ -1015,8 +1049,8 @@ export function ManagersView() {
                   {statusLoading
                     ? 'Updating Status...'
                     : activeStatusManager.accountStatus === 'active'
-                    ? 'Confirm Disable Manager'
-                    : 'Confirm Enable Manager'}
+                    ? 'Confirm Deactivate'
+                    : 'Confirm Reactivate'}
                 </button>
               </div>
             </div>
@@ -1172,7 +1206,7 @@ export function ManagersView() {
                   <input
                     required
                     type={showNewPassword ? 'text' : 'password'}
-                    placeholder="Enter new password (min 6 chars)"
+                    placeholder="Enter new password (8 - 256 chars)"
                     value={newPassword}
                     onChange={(e) => setNewPassword(e.target.value)}
                   />

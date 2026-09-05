@@ -56,9 +56,9 @@ export type Manager = {
   id: string
   name: string
   username: string
-  mobileNumber: string
+  mobileNumber?: string | null
   role: 'manager' | string
-  accountStatus: 'active' | 'suspended' | 'disabled' | string
+  accountStatus: 'active' | 'deactivated' | 'suspended' | 'disabled' | string
   createdAt?: string
 }
 
